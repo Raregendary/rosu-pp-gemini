@@ -36,6 +36,8 @@ macro_rules! test_cases {
         aim: $aim:literal,
         aim_difficult_slider_count: $aim_difficult_slider_count:literal,
         speed: $speed:literal,
+        reading: $reading:literal,
+        reading_difficult_note_count: $reading_difficult_note_count:literal,
         flashlight: $flashlight:literal,
         slider_factor: $slider_factor:literal,
         aim_top_weighted_slider_factor: $aim_top_weighted_slider_factor:literal,
@@ -62,6 +64,8 @@ macro_rules! test_cases {
             aim: $aim,
             aim_difficult_slider_count: $aim_difficult_slider_count,
             speed: $speed,
+            reading: $reading,
+            reading_difficult_note_count: $reading_difficult_note_count,
             flashlight: $flashlight,
             slider_factor: $slider_factor,
             aim_top_weighted_slider_factor: $aim_top_weighted_slider_factor,
@@ -154,16 +158,18 @@ fn basic_osu() {
     test_cases! {
         Osu: OSU {
             NM => {
-                aim: 3.021506412510076,
-                aim_difficult_slider_count: 180.33980678704012,
-                speed: 2.5263145770639976,
+                aim: 3.278637247177605,
+                aim_difficult_slider_count: 192.52700309204852,
+                speed: 2.4917265153109014,
+                reading: 0.8291853888320672,
+                reading_difficult_note_count: 35.039687374657035,
                 flashlight: 0.0,
-                slider_factor: 0.9847225384137204,
-                aim_top_weighted_slider_factor: 1.3996332540321264,
-                speed_top_weighted_slider_factor: 0.6014562852677632,
-                speed_note_count: 202.24319351543616,
-                aim_difficult_strain_count: 108.47555309841259,
-                speed_difficult_strain_count: 78.39830024782772,
+                slider_factor: 0.9630387364631106,
+                aim_top_weighted_slider_factor: 1.5242018497163852,
+                speed_top_weighted_slider_factor: 0.536191641231213,
+                speed_note_count: 183.0639785973236,
+                aim_difficult_strain_count: 124.69578526285657,
+                speed_difficult_strain_count: 81.74921671931915,
                 nested_score_per_object: 34.991680532445926,
                 legacy_score_base_multiplier: 5.0,
                 maximum_legacy_combo_score: 15729840.0,
@@ -176,20 +182,22 @@ fn basic_osu() {
                 n_sliders: 293,
                 n_large_ticks: 15,
                 n_spinners: 1,
-                stars: 5.740766046562339,
+                stars: 6.004366039467877,
                 max_combo: 909,
             };
             HD => {
-                aim: 3.121489829231887,
-                aim_difficult_slider_count: 180.33980678704012,
-                speed: 2.614171127905441,
+                aim: 3.278637247177605,
+                aim_difficult_slider_count: 192.52700309204852,
+                speed: 2.4917265153109014,
+                reading: 2.1860538839546106,
+                reading_difficult_note_count: 135.65520344400448,
                 flashlight: 0.0,
-                slider_factor: 0.9847225384137204,
-                aim_top_weighted_slider_factor: 1.3996332540321264,
-                speed_top_weighted_slider_factor: 0.6014562852677632,
-                speed_note_count: 202.24319351543616,
-                aim_difficult_strain_count: 108.47555309841259,
-                speed_difficult_strain_count: 78.39830024782772,
+                slider_factor: 0.9630387364631106,
+                aim_top_weighted_slider_factor: 1.5242018497163852,
+                speed_top_weighted_slider_factor: 0.536191641231213,
+                speed_note_count: 183.0639785973236,
+                aim_difficult_strain_count: 124.69578526285657,
+                speed_difficult_strain_count: 81.74921671931915,
                 nested_score_per_object: 34.991680532445926,
                 legacy_score_base_multiplier: 5.0,
                 maximum_legacy_combo_score: 15729840.0,
@@ -202,20 +210,22 @@ fn basic_osu() {
                 n_sliders: 293,
                 n_large_ticks: 15,
                 n_spinners: 1,
-                stars: 5.934133851244851,
+                stars: 6.309845567239826,
                 max_combo: 909,
             };
             HR => {
-                aim: 3.4309052630747257,
-                aim_difficult_slider_count: 187.20300643263465,
-                speed: 2.6813963801152716,
+                aim: 3.79923016723658,
+                aim_difficult_slider_count: 191.8309436417523,
+                speed: 2.4917265153109014,
+                reading: 0.9144659053428965,
+                reading_difficult_note_count: 38.45400233005823,
                 flashlight: 0.0,
-                slider_factor: 0.9748562752795166,
-                aim_top_weighted_slider_factor: 1.3634873114118244,
-                speed_top_weighted_slider_factor: 0.6668815233244475,
-                speed_note_count: 185.01178339020348,
-                aim_difficult_strain_count: 112.28112750203013,
-                speed_difficult_strain_count: 74.53251006179151,
+                slider_factor: 0.9475984697095592,
+                aim_top_weighted_slider_factor: 1.5100784855077343,
+                speed_top_weighted_slider_factor: 0.536191641231213,
+                speed_note_count: 183.0639785973236,
+                aim_difficult_strain_count: 119.62905278228544,
+                speed_difficult_strain_count: 81.74921671931915,
                 nested_score_per_object: 34.991680532445926,
                 legacy_score_base_multiplier: 5.0,
                 maximum_legacy_combo_score: 15729840.0,
@@ -228,20 +238,22 @@ fn basic_osu() {
                 n_sliders: 293,
                 n_large_ticks: 15,
                 n_spinners: 1,
-                stars: 6.375104448752039,
+                stars: 6.713670477914205,
                 max_combo: 909,
             };
             DT => {
-                aim: 4.3662195513104525,
-                aim_difficult_slider_count: 195.41476682131653,
-                speed:  3.7793477426295814,
+                aim: 4.693555645360275,
+                aim_difficult_slider_count: 207.9741594999943,
+                speed: 3.674242476685812,
+                reading: 2.01355217783768,
+                reading_difficult_note_count: 190.7406956089773,
                 flashlight: 0.0,
-                slider_factor: 0.9787310737204966,
-                aim_top_weighted_slider_factor: 1.3819099517666353,
-                speed_top_weighted_slider_factor: 0.6923456235877925,
-                speed_note_count: 208.98215163620375,
-                aim_difficult_strain_count: 130.48279566301667,
-                speed_difficult_strain_count: 93.64469563382437,
+                slider_factor: 0.9674909299164448,
+                aim_top_weighted_slider_factor: 1.4768880971198521,
+                speed_top_weighted_slider_factor: 0.6387657108874913,
+                speed_note_count: 211.4547877995673,
+                aim_difficult_strain_count: 144.311220047471,
+                speed_difficult_strain_count: 86.6096904172161,
                 nested_score_per_object: 34.991680532445926,
                 legacy_score_base_multiplier: 5.0,
                 maximum_legacy_combo_score: 15729840.0,
@@ -254,20 +266,22 @@ fn basic_osu() {
                 n_sliders: 293,
                 n_large_ticks: 15,
                 n_spinners: 1,
-                stars: 8.40182116136074,
+                stars: 8.761310471544146,
                 max_combo: 909,
             };
             FL => {
-                aim: 3.021506412510076,
-                aim_difficult_slider_count: 180.33980678704012,
-                speed: 2.5263145770639976,
-                flashlight: 2.3005989208967885,
-                slider_factor: 0.9847225384137204,
-                aim_top_weighted_slider_factor: 1.3996332540321264,
-                speed_top_weighted_slider_factor: 0.6014562852677632,
-                speed_note_count: 202.24319351543616,
-                aim_difficult_strain_count: 108.47555309841259,
-                speed_difficult_strain_count: 78.39830024782772,
+                aim: 3.278637247177605,
+                aim_difficult_slider_count: 192.52700309204852,
+                speed: 2.4917265153109014,
+                reading: 0.8291853888320672,
+                reading_difficult_note_count: 35.039687374657035,
+                flashlight: 2.3448026685696757,
+                slider_factor: 0.9630387364631106,
+                aim_top_weighted_slider_factor: 1.5242018497163852,
+                speed_top_weighted_slider_factor: 0.536191641231213,
+                speed_note_count: 183.0639785973236,
+                aim_difficult_strain_count: 124.69578526285657,
+                speed_difficult_strain_count: 81.74921671931915,
                 nested_score_per_object: 34.991680532445926,
                 legacy_score_base_multiplier: 5.0,
                 maximum_legacy_combo_score: 15729840.0,
@@ -280,20 +294,22 @@ fn basic_osu() {
                 n_sliders: 293,
                 n_large_ticks: 15,
                 n_spinners: 1,
-                stars: 6.864308231959398,
+                stars: 7.035836648591728,
                 max_combo: 909,
             };
             HD EZ => {
-                aim: 2.9818506123002706,
-                aim_difficult_slider_count: 173.00759261125233,
-                speed: 2.511531850339625,
+                aim: 2.7625480665542375,
+                aim_difficult_slider_count: 196.89037772576094,
+                speed: 2.39953606797714,
+                reading: 3.556094797209706,
+                reading_difficult_note_count: 124.69190736811521,
                 flashlight: 0.0,
-                slider_factor: 0.9931728395338801,
-                aim_top_weighted_slider_factor: 1.4758126955064637,
-                speed_top_weighted_slider_factor: 0.48777057881852615,
-                speed_note_count: 211.97339651166865,
-                aim_difficult_strain_count: 107.45480335487801,
-                speed_difficult_strain_count: 78.94432491731223,
+                slider_factor: 0.9796908442807478,
+                aim_top_weighted_slider_factor: 1.5627391895895972,
+                speed_top_weighted_slider_factor: 0.5369556941433561,
+                speed_note_count: 192.26494513961634,
+                aim_difficult_strain_count: 129.38152438285374,
+                speed_difficult_strain_count: 84.40439013801313,
                 nested_score_per_object: 34.991680532445926,
                 legacy_score_base_multiplier: 3.0,
                 maximum_legacy_combo_score: 15729840.0,
@@ -306,20 +322,22 @@ fn basic_osu() {
                 n_sliders: 293,
                 n_large_ticks: 15,
                 n_spinners: 1,
-                stars: 5.680319048111094,
+                stars: 6.894294750828443,
                 max_combo: 909,
             };
             HD FL => {
-                aim: 3.121489829231887,
-                aim_difficult_slider_count: 180.33980678704012,
-                speed: 2.614171127905441,
-                flashlight: 2.620335643475851,
-                slider_factor: 0.9847225384137204,
-                aim_top_weighted_slider_factor: 1.3996332540321264,
-                speed_top_weighted_slider_factor: 0.6014562852677632,
-                speed_note_count: 202.24319351543616,
-                aim_difficult_strain_count: 108.47555309841259,
-                speed_difficult_strain_count: 78.39830024782772,
+                aim: 3.278637247177605,
+                aim_difficult_slider_count: 192.52700309204852,
+                speed: 2.4917265153109014,
+                reading: 2.1860538839546106,
+                reading_difficult_note_count: 135.65520344400448,
+                flashlight: 2.714310188135725,
+                slider_factor: 0.9630387364631106,
+                aim_top_weighted_slider_factor: 1.5242018497163852,
+                speed_top_weighted_slider_factor: 0.536191641231213,
+                speed_note_count: 183.0639785973236,
+                aim_difficult_strain_count: 124.69578526285657,
+                speed_difficult_strain_count: 81.74921671931915,
                 nested_score_per_object: 34.991680532445926,
                 legacy_score_base_multiplier: 5.0,
                 maximum_legacy_combo_score: 15729840.0,
@@ -332,11 +350,21 @@ fn basic_osu() {
                 n_sliders: 293,
                 n_large_ticks: 15,
                 n_spinners: 1,
-                stars: 7.2736222258399374,
+                stars: 7.546544719956669,
                 max_combo: 909,
             };
         }
     };
+}
+
+fn run<A>(actual: &A, expected: &A, mods: u32)
+where
+    A: AssertEq,
+    for<'a> &'a A: UnwindSafe,
+{
+    if panic::catch_unwind(|| actual.assert_eq(expected)).is_err() {
+        panic!("Mods: {mods}");
+    }
 }
 
 #[test]
@@ -564,15 +592,7 @@ fn convert_mania() {
     };
 }
 
-fn run<A>(actual: &A, expected: &A, mods: u32)
-where
-    A: AssertEq,
-    for<'a> &'a A: UnwindSafe,
-{
-    if panic::catch_unwind(|| actual.assert_eq(expected)).is_err() {
-        panic!("Mods: {mods}");
-    }
-}
+
 
 impl AssertEq for OsuDifficultyAttributes {
     fn assert_eq(&self, expected: &Self) {
@@ -580,6 +600,8 @@ impl AssertEq for OsuDifficultyAttributes {
             aim,
             aim_difficult_slider_count,
             speed,
+            reading,
+            reading_difficult_note_count,
             flashlight,
             slider_factor,
             aim_top_weighted_slider_factor,
@@ -609,6 +631,11 @@ impl AssertEq for OsuDifficultyAttributes {
             expected.aim_difficult_slider_count,
         );
         assert_eq_float(*speed, expected.speed);
+        assert_eq_float(*reading, expected.reading);
+        assert_eq_float(
+            *reading_difficult_note_count,
+            expected.reading_difficult_note_count,
+        );
         assert_eq_float(*flashlight, expected.flashlight);
         assert_eq_float(*slider_factor, expected.slider_factor);
         assert_eq_float(

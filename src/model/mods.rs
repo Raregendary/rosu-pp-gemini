@@ -245,6 +245,7 @@ impl GameMods {
             .map(|seed| seed as i32)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn attraction_strength(&self) -> Option<f64> {
         let Self::Lazer(mods) = self else { return None };
 
@@ -256,6 +257,7 @@ impl GameMods {
             .flatten()
     }
 
+    #[allow(dead_code)]
     pub(crate) fn deflate_start_scale(&self) -> Option<f64> {
         let Self::Lazer(mods) = self else { return None };
 
@@ -267,6 +269,7 @@ impl GameMods {
             .flatten()
     }
 
+    #[allow(dead_code)]
     pub(crate) fn hd_only_fade_approach_circles(&self) -> Option<bool> {
         let Self::Lazer(mods) = self else { return None };
 

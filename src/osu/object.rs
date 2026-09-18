@@ -28,7 +28,6 @@ pub struct OsuObject {
 
 impl OsuObject {
     pub const OBJECT_RADIUS: f32 = 64.0;
-    pub const PREEMPT_MIN: f64 = 450.0;
 
     const BASE_SCORING_DIST: f32 = 100.0;
 

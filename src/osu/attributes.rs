@@ -23,6 +23,10 @@ pub struct OsuDifficultyAttributes {
     pub aim_difficult_strain_count: f64,
     /// Weighted sum of speed strains.
     pub speed_difficult_strain_count: f64,
+    /// The difficulty of the reading skill.
+    pub reading: f64,
+    /// Weighted sum of reading strains.
+    pub reading_difficult_note_count: f64,
     /// The amount of nested score per object.
     pub nested_score_per_object: f64,
     /// The legacy score base multiplier.
@@ -97,6 +101,8 @@ pub struct OsuPerformanceAttributes {
     pub pp_flashlight: f64,
     /// The speed portion of the final pp.
     pub pp_speed: f64,
+    /// The reading portion of the final pp.
+    pub pp_reading: f64,
     /// Misses including an approximated amount of slider breaks
     pub effective_miss_count: f64,
     /// Approximated unstable-rate

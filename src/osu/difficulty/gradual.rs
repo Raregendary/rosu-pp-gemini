@@ -4,7 +4,7 @@ use rosu_map::section::general::GameMode;
 
 use crate::{
     Beatmap, Difficulty,
-    any::{CalculateError, difficulty::skills::StrainSkill},
+    any::CalculateError,
     model::mode::ConvertError,
     osu::{
         convert::convert_objects,
@@ -139,15 +139,18 @@ fn new(difficulty: Difficulty, map: &Beatmap) -> OsuGradualDifficulty {
 
     let mut osu_objects = OsuObjects::new(osu_objects);
 
+    let great_hit_window = 2.0 * map_attrs.hit_windows().od_great.unwrap_or(0.0);
+    let preempt = map_attrs.hit_windows().ar.unwrap_or(0.0);
+
     let diff_objects = DifficultyValues::create_difficulty_objects(
         &difficulty,
         &scaling_factor,
         osu_objects.iter_mut(),
+        great_hit_window,
+        preempt,
     );
 
-    let great_hit_window = map_attrs.hit_windows().od_great.unwrap_or(0.0);
-
-    let skills = OsuSkills::new(mods, &scaling_factor, great_hit_window, time_preempt);
+    let skills = OsuSkills::new(mods, &scaling_factor, map.hit_objects.len());
     let diff_objects = extend_lifetime(diff_objects.into_boxed_slice());
 
     let score_simulator = GradualLegacyScoreSimulator::new(map, map_attrs);
@@ -200,10 +203,7 @@ impl Iterator for OsuGradualDifficulty {
         if self.idx > 0 {
             let curr = self.diff_objects.get(self.idx - 1)?;
 
-            self.skills.aim.process(curr, &self.diff_objects);
-            self.skills.aim_no_sliders.process(curr, &self.diff_objects);
-            self.skills.speed.process(curr, &self.diff_objects);
-            self.skills.flashlight.process(curr, &self.diff_objects);
+            self.skills.process(curr, &self.diff_objects);
 
             Self::increment_combo(curr.base, &mut self.attrs);
         } else if self.osu_objects.is_empty() {

@@ -4,7 +4,7 @@ use rosu_map::section::general::GameMode;
 
 use self::calculator::OsuPerformanceCalculator;
 
-pub use self::{calculator::PERFORMANCE_BASE_MULTIPLIER, inspect::InspectOsuPerformance};
+pub use self::inspect::InspectOsuPerformance;
 
 use crate::{
     Beatmap,
