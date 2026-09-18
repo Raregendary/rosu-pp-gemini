@@ -49,6 +49,37 @@ impl MovementEvaluator {
                 / sqrt_strain;
         }
 
+        // Linear spacing nerf.
+        let mut linear_spacing_count = 0.0;
+
+        for i in 0..curr.idx.min(10) {
+            let Some(catch_prev_obj) = curr.previous(i, diff_objects) else {
+                break;
+            };
+
+            // Only same direction movements matter as they do not take any additional inputs.
+            if curr.dist_moved == 0.0
+                || catch_prev_obj.dist_moved == 0.0
+                || curr.dist_moved.signum() != catch_prev_obj.dist_moved.signum()
+            {
+                break;
+            }
+
+            let current_spacing = (f64::from(curr.dist_moved) / curr.strain_time).abs();
+            let prev_spacing =
+                (f64::from(catch_prev_obj.dist_moved) / catch_prev_obj.strain_time).abs();
+
+            let relative_difference = (current_spacing / prev_spacing - 1.0).abs();
+
+            if relative_difference > 0.05 {
+                break;
+            }
+
+            linear_spacing_count += 1.0;
+        }
+
+        dist_addition *= 0.7_f64.powf(linear_spacing_count);
+
         // * Bonus for edge dashes.
         if curr.last_object.dist_to_hyper_dash <= 20.0 {
             if !curr.last_object.hyper_dash {
