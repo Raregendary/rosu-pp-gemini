@@ -2,6 +2,126 @@
 
 # rosu-pp
 
+> [!NOTE]
+> **Fork Notice**: This is a temporary fork that is **not planned to be updated for future versions**. The upstream `rosu-pp` maintainers are already actively working on and nearing completion of their own official PR/update for the latest difficulty & PP algorithms. This fork is intended strictly as a one-time solution while the upstream project completes its release.
+
+## Performance Benchmarks & Comparison vs. osu-tools
+
+Benchmark conducted between **`osu-tools`** (.NET 8.0 Release) and **`rosu-pp`** (Rust Release) on official osu! beatmaps above 5–6★ across all four game modes (warmup iterations followed by 50 timed iterations for Decoding & Difficulty, and 500 timed iterations for Performance):
+
+### 1. Decoding (.osu Beatmap Parser)
+
+| Gamemode / Beatmap | `osu-tools` (Median / Mean) | `rosu-pp` (Median / Mean) | Speedup |
+| :--- | :--- | :--- | :--- |
+| **osu! standard (5525390, 6.24★)** | 15.57 ms / 15.80 ms | **0.82 ms / 0.85 ms** | **~19.0x faster** |
+| **osu! standard (3700073, 8.73★)** | 6.35 ms / 8.06 ms | **0.96 ms / 0.96 ms** | **~6.6x faster** |
+| **osu!taiko (5727828, 7.59★)** | 4.20 ms / 4.60 ms | **0.59 ms / 0.62 ms** | **~7.1x faster** |
+| **osu!catch (4384622, 6.02★)** | 3.59 ms / 4.41 ms | **0.77 ms / 0.81 ms** | **~4.7x faster** |
+| **osu!mania (5873946, 5.91★)** | 5.23 ms / 5.73 ms | **1.04 ms / 1.06 ms** | **~5.0x faster** |
+
+### 2. Difficulty Calculation (Star Rating & Skills)
+
+| Gamemode / Beatmap | `osu-tools` (Median / Mean) | `rosu-pp` (Median / Mean) | Speedup |
+| :--- | :--- | :--- | :--- |
+| **osu! standard (5525390, 6.24★)** | 19.56 ms / 21.55 ms | **2.47 ms / 2.50 ms** | **~7.9x faster** |
+| **osu! standard (3700073, 8.73★)** | 15.75 ms / 17.54 ms | **9.77 ms / 9.71 ms** | **~1.6x faster** |
+| **osu!taiko (5727828, 7.59★)** | 6.47 ms / 7.39 ms | **1.65 ms / 1.72 ms** | **~3.9x faster** |
+| **osu!catch (4384622, 6.02★)** | 6.20 ms / 8.49 ms | **0.42 ms / 0.42 ms** | **~14.8x faster** |
+| **osu!mania (5873946, 5.91★)** | 5.34 ms / 6.63 ms | **3.22 ms / 3.21 ms** | **~1.7x faster** |
+
+### 3. Performance (PP) Calculation
+
+| Gamemode / Beatmap | `osu-tools` (Median / Mean) | `rosu-pp` (Median / Mean) | Speedup |
+| :--- | :--- | :--- | :--- |
+| **osu! standard (5525390, 6.24★)** | 2.00 µs / 2.17 µs | **0.40 µs / 0.38 µs** | **~5.0x faster** |
+| **osu! standard (3700073, 8.73★)** | 1.50 µs / 2.01 µs | **0.40 µs / 0.44 µs** | **~3.8x faster** |
+| **osu!taiko (5727828, 7.59★)** | 0.30 µs / 0.35 µs | **0.30 µs / 0.32 µs** | **~1.0x (parity)** |
+| **osu!catch (4384622, 6.02★)** | 0.50 µs / 0.54 µs | **0.10 µs / 0.11 µs** | **~5.0x faster** |
+| **osu!mania (5873946, 5.91★)** | 0.20 µs / 0.19 µs | **0.10 µs / 0.10 µs** | **~2.0x faster** |
+
+---
+
+## Beatmap Calculations Across Game Mods: Comparison vs. osu-tools
+
+Direct comparison between **`osu-tools`** and **`rosu-pp`** for Star Rating and 100% FC PP across different game mods (`NM`, `HD`, `HR`, `DT`, `FL`, `EZ`, `HT`, `CL`, `HDHR`, `HDDT`), rounded to 4 decimal places:
+
+### osu! Standard: [LE SSERAFIM - CRAZY [DADADA]](https://osu.ppy.sh/b/5525390) (Beatmap ID: 5525390)
+
+| Mod | Star Rating (`osu-tools`) | Star Rating (`rosu-pp`) | 100% FC PP (`osu-tools`) | 100% FC PP (`rosu-pp`) |
+| :--- | :--- | :--- | :--- | :--- |
+| **NM** | 6.2424★ | 6.2424★ | 367.2054 pp | 367.2054 pp |
+| **HD** | 6.5029★ | 6.5029★ | 397.7292 pp | 397.7292 pp |
+| **HR** | 6.8243★ | 6.8243★ | 505.5194 pp | 505.5194 pp |
+| **DT** | 9.3939★ | 9.3939★ | 1067.5463 pp | 1067.5464 pp |
+| **FL** | 8.0231★ | 8.0231★ | 632.7455 pp | 632.7455 pp |
+| **EZ** | 6.5908★ | 6.5908★ | 306.9029 pp | 306.9029 pp |
+| **HT** | 4.9180★ | 4.9180★ | 186.8024 pp | 186.8024 pp |
+| **CL** | 6.2424★ | 6.2424★ | 336.4563 pp | 336.4563 pp |
+| **HDHR** | 6.9992★ | 6.9992★ | 529.4846 pp | 529.4846 pp |
+| **HDDT** | 9.5303★ | 9.5303★ | 1103.2874 pp | 1103.2875 pp |
+
+### osu! Standard (Heavy Map): [Kardashev - Cellar of Ghosts [Remnants]](https://osu.ppy.sh/b/3700073) (Beatmap ID: 3700073)
+
+| Mod | Star Rating (`osu-tools`) | Star Rating (`rosu-pp`) | 100% FC PP (`osu-tools`) | 100% FC PP (`rosu-pp`) |
+| :--- | :--- | :--- | :--- | :--- |
+| **NM** | 8.7309★ | 8.7309★ | 992.9525 pp | 992.9525 pp |
+| **HD** | 9.1045★ | 9.1045★ | 1078.7972 pp | 1078.7972 pp |
+| **HR** | 9.6607★ | 9.6607★ | 1334.5754 pp | 1334.5754 pp |
+| **DT** | 14.3030★ | 14.3030★ | 3593.0509 pp | 3593.0522 pp |
+| **FL** | 11.8383★ | 11.8383★ | 1961.7580 pp | 1961.7580 pp |
+| **EZ** | 8.3965★ | 8.3965★ | 654.3604 pp | 654.3604 pp |
+| **HT** | 6.6786★ | 6.6786★ | 479.8592 pp | 479.8589 pp |
+| **CL** | 8.7309★ | 8.7309★ | 990.9652 pp | 990.9652 pp |
+| **HDHR** | 10.0177★ | 10.0177★ | 1434.4691 pp | 1434.4691 pp |
+| **HDDT** | 14.4864★ | 14.4864★ | 3704.7785 pp | 3704.7797 pp |
+
+### osu!taiko: [tezuka x Aoi feat. Momohina Nano - Small Cloud Sugar Candy [Bittersweet Remedy]](https://osu.ppy.sh/b/5727828) (Beatmap ID: 5727828)
+
+| Mod | Star Rating (`osu-tools`) | Star Rating (`rosu-pp`) | 100% FC PP (`osu-tools`) | 100% FC PP (`rosu-pp`) |
+| :--- | :--- | :--- | :--- | :--- |
+| **NM** | 7.5937★ | 7.8979★ | 652.8474 pp | 696.9019 pp |
+| **HD** | 7.5937★ | 7.8979★ | 677.0432 pp | 722.1199 pp |
+| **HR** | 8.2433★ | 8.4953★ | 871.7036 pp | 916.7502 pp |
+| **DT** | 10.5231★ | 10.8157★ | 1444.5382 pp | 1552.8466 pp |
+| **FL** | 7.5937★ | 7.8979★ | 675.3635 pp | 721.4924 pp |
+| **EZ** | 7.5563★ | 7.8542★ | 567.5302 pp | 608.5732 pp |
+| **HT** | 6.0596★ | 6.3257★ | 397.7714 pp | 425.5101 pp |
+| **CL** | 7.5937★ | 7.8979★ | 652.8474 pp | 696.9019 pp |
+| **HDHR** | 8.2433★ | 8.4953★ | 907.2212 pp | 953.5518 pp |
+| **HDDT** | 10.5231★ | 10.8157★ | 1498.2048 pp | 1609.5181 pp |
+
+### osu!catch: [Tektheist - Nerv [Where am I?]](https://osu.ppy.sh/b/4384622) (Beatmap ID: 4384622)
+
+| Mod | Star Rating (`osu-tools`) | Star Rating (`rosu-pp`) | 100% FC PP (`osu-tools`) | 100% FC PP (`rosu-pp`) |
+| :--- | :--- | :--- | :--- | :--- |
+| **NM** | 6.0173★ | 6.0351★ | 509.3719 pp | 512.3866 pp |
+| **HD** | 6.0173★ | 6.0351★ | 553.9420 pp | 557.2204 pp |
+| **HR** | 6.6712★ | 6.6836★ | 655.9872 pp | 658.4385 pp |
+| **DT** | 8.6802★ | 8.7108★ | 1245.5471 pp | 1254.3480 pp |
+| **FL** | 6.0173★ | 6.0351★ | 885.9948 pp | 891.2384 pp |
+| **EZ** | 6.5622★ | 6.5656★ | 623.9098 pp | 624.5546 pp |
+| **HT** | 4.6702★ | 4.6786★ | 292.1166 pp | 293.1694 pp |
+| **CL** | 6.0173★ | 6.0351★ | 509.3719 pp | 512.3866 pp |
+| **HDHR** | 6.6712★ | 6.6836★ | 688.7865 pp | 691.3604 pp |
+| **HDDT** | 8.6802★ | 8.7108★ | 1274.6098 pp | 1283.6162 pp |
+
+### osu!mania: [Laur - Sound Chimera [[4K] Tryambakam // feat. Auros]](https://osu.ppy.sh/b/5873946) (Beatmap ID: 5873946)
+
+| Mod | Star Rating (`osu-tools`) | Star Rating (`rosu-pp`) | 100% FC PP (`osu-tools`) | 100% FC PP (`rosu-pp`) |
+| :--- | :--- | :--- | :--- | :--- |
+| **NM** | 5.9052★ | 5.9052★ | 413.6337 pp | 413.6337 pp |
+| **HD** | 5.9052★ | 5.9052★ | 413.6337 pp | 413.6337 pp |
+| **HR** | 5.9052★ | 5.9052★ | 413.6337 pp | 413.6337 pp |
+| **DT** | 8.1950★ | 8.1950★ | 864.2538 pp | 864.2538 pp |
+| **FL** | 5.9052★ | 5.9052★ | 413.6337 pp | 413.6337 pp |
+| **EZ** | 5.9052★ | 5.9052★ | 206.8168 pp | 206.8168 pp |
+| **HT** | 4.7116★ | 4.7116★ | 248.0510 pp | 248.0510 pp |
+| **CL** | 5.9052★ | 5.9052★ | 413.6337 pp | 413.6337 pp |
+| **HDHR** | 5.9052★ | 5.9052★ | 413.6337 pp | 413.6337 pp |
+| **HDDT** | 8.1950★ | 8.1950★ | 864.2538 pp | 864.2538 pp |
+
+---
+
 <!-- cargo-rdme start -->
 
 Library to calculate difficulty and performance attributes for all [osu!] gamemodes.

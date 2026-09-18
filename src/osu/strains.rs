@@ -37,6 +37,7 @@ pub fn strains(difficulty: &Difficulty, map: &Beatmap) -> Result<OsuStrains, Con
                 speed,
                 flashlight,
                 reading: _,
+                ..
             },
         attrs: _,
     } = DifficultyValues::calculate(difficulty, &map);

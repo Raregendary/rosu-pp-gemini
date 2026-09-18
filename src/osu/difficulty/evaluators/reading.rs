@@ -165,6 +165,10 @@ impl ReadingEvaluator {
         curr: &OsuDifficultyObject<'_>,
         diff_objects: &[OsuDifficultyObject<'_>],
     ) -> f64 {
+        if curr.angle.is_none() {
+            return 1.0;
+        }
+
         let mut num = 0.0;
         let mut num2 = 0;
         let mut num3 = 0.0;

@@ -183,6 +183,7 @@ impl DifficultyValues {
             speed,
             flashlight,
             reading,
+            ..
         } = skills;
 
         let mut aim = aim.clone();
