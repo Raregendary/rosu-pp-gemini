@@ -1,4 +1,5 @@
 use crate::{
+    any::difficulty::object::IDifficultyObject,
     model::mods::GameMods,
     osu::difficulty::{
         evaluators::{RhythmEvaluator, SpeedEvaluator},
@@ -12,6 +13,9 @@ pub struct Speed {
     current_strain: f64,
     object_difficulties: Vec<f64>,
     slider_strains: Vec<f64>,
+    timeline_peaks: Vec<f64>,
+    timeline_section_end: f64,
+    timeline_section_peak: f64,
     pub object_weight_sum: f64,
     is_relax: bool,
     is_autopilot: bool,
@@ -26,6 +30,9 @@ impl Speed {
             current_strain: 0.0,
             object_difficulties: Vec::new(),
             slider_strains: Vec::new(),
+            timeline_peaks: Vec::new(),
+            timeline_section_end: 0.0,
+            timeline_section_peak: 0.0,
             object_weight_sum: 0.0,
             is_relax: mods.rx(),
             is_autopilot: mods.ap(),
@@ -36,13 +43,35 @@ impl Speed {
         0.3_f64.powf(ms / 1000.0)
     }
 
+    fn calculate_initial_strain(
+        &self,
+        time: f64,
+        curr: &OsuDifficultyObject<'_>,
+        diff_objects: &[OsuDifficultyObject<'_>],
+    ) -> f64 {
+        let prev_start_time = curr.previous(0, diff_objects).map_or(0.0, |p| p.start_time);
+        self.current_strain * Self::strain_decay(time - prev_start_time)
+    }
+
     pub fn process(
         &mut self,
         curr: &OsuDifficultyObject<'_>,
         diff_objects: &[OsuDifficultyObject<'_>],
     ) {
+        if curr.idx == 0 {
+            self.timeline_section_end = (curr.start_time / 400.0).ceil() * 400.0;
+        }
+
+        while curr.start_time > self.timeline_section_end {
+            self.timeline_peaks.push(self.timeline_section_peak);
+            self.timeline_section_peak =
+                self.calculate_initial_strain(self.timeline_section_end, curr, diff_objects);
+            self.timeline_section_end += 400.0;
+        }
+
         let diff = self.object_difficulty_of(curr, diff_objects);
         self.object_difficulties.push(diff);
+        self.timeline_section_peak = f64::max(self.timeline_section_peak, diff);
     }
 
     fn object_difficulty_of(
@@ -103,8 +132,9 @@ impl Speed {
         clone.difficulty_value()
     }
 
-    pub fn into_current_strain_peaks(self) -> Vec<f64> {
-        self.object_difficulties
+    pub fn into_current_strain_peaks(mut self) -> Vec<f64> {
+        self.timeline_peaks.push(self.timeline_section_peak);
+        self.timeline_peaks
     }
 
     pub fn difficulty_value(&mut self) -> f64 {

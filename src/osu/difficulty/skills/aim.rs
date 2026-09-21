@@ -39,6 +39,9 @@ pub struct Aim {
     peaks_finalised: bool,
     object_difficulties: Vec<f64>,
     slider_strains: Vec<f64>,
+    timeline_peaks: Vec<f64>,
+    timeline_section_end: f64,
+    timeline_section_peak: f64,
     decay_weight: f64,
     max_section_length: f64,
     max_stored_length: f64,
@@ -65,6 +68,9 @@ impl Aim {
             peaks_finalised: false,
             object_difficulties: Vec::new(),
             slider_strains: Vec::new(),
+            timeline_peaks: Vec::new(),
+            timeline_section_end: 0.0,
+            timeline_section_peak: 0.0,
             decay_weight,
             max_section_length,
             max_stored_length,
@@ -164,10 +170,22 @@ impl Aim {
         diff_objects: &[OsuDifficultyObject<'_>],
     ) {
         if curr.idx == 0 {
+            self.timeline_section_end = (curr.start_time / 400.0).ceil() * 400.0;
+        }
+
+        while curr.start_time > self.timeline_section_end {
+            self.timeline_peaks.push(self.timeline_section_peak);
+            self.timeline_section_peak =
+                self.calculate_initial_strain(self.timeline_section_end, curr, diff_objects);
+            self.timeline_section_end += 400.0;
+        }
+
+        if curr.idx == 0 {
             self.current_section_begin = curr.start_time;
             self.current_section_end = self.current_section_begin + self.max_section_length;
             self.current_section_peak = self.strain_value_at(curr, diff_objects);
             self.object_difficulties.push(self.current_section_peak);
+            self.timeline_section_peak = self.current_section_peak;
             return;
         }
 
@@ -175,6 +193,7 @@ impl Aim {
 
         let num = self.strain_value_at(curr, diff_objects);
         self.object_difficulties.push(num);
+        self.timeline_section_peak = f64::max(self.timeline_section_peak, num);
 
         if num > self.current_section_peak {
             self.queued_strains.clear();
@@ -249,7 +268,8 @@ impl Aim {
     }
 
     pub fn into_current_strain_peaks(mut self) -> Vec<f64> {
-        self.get_current_strain_peaks().iter().map(|p| p.value).collect()
+        self.timeline_peaks.push(self.timeline_section_peak);
+        self.timeline_peaks
     }
 
     #[allow(dead_code)]

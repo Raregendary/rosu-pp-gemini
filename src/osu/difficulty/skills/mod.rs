@@ -15,7 +15,6 @@ pub struct OsuSkills {
     pub speed: Speed,
     pub reading: Reading,
     pub flashlight: Flashlight,
-    pub has_flashlight: bool,
 }
 
 impl OsuSkills {
@@ -24,7 +23,6 @@ impl OsuSkills {
         scaling_factor: &ScalingFactor,
         total_objects: usize,
     ) -> Self {
-        let has_flashlight = mods.fl();
         let aim = Aim::new(mods, true);
         let aim_no_sliders = Aim::new(mods, false);
         let speed = Speed::new(mods);
@@ -37,7 +35,6 @@ impl OsuSkills {
             speed,
             reading,
             flashlight,
-            has_flashlight,
         }
     }
 
@@ -46,8 +43,6 @@ impl OsuSkills {
         self.aim_no_sliders.process(curr, objects);
         self.speed.process(curr, objects);
         self.reading.process(curr, objects);
-        if self.has_flashlight {
-            self.flashlight.process(curr, objects);
-        }
+        self.flashlight.process(curr, objects);
     }
 }
