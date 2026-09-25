@@ -1,14 +1,18 @@
 [package]
-name = "rosu-pp"
+name = "rosu-pp-gemini"
 version = "5.0.1"
 edition = "2024"
-authors = ["MaxOhn <ohn.m@hotmail.de>"]
+authors = ["MaxOhn <ohn.m@hotmail.de>", "Raregendary <thehellpuma@gmail.com>"]
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/MaxOhn/rosu-pp"
-documentation = "https://docs.rs/rosu-pp/"
+repository = "https://github.com/Raregendary/rosu-pp-gemini"
+documentation = "https://docs.rs/rosu-pp-gemini/"
 description = "Difficulty and performance calculation for osu!"
 keywords = ["osu", "pp", "stars", "performance", "difficulty"]
+
+[lib]
+name = "rosu_pp"
+path = "src/lib.rs"
 
 [features]
 default = []
