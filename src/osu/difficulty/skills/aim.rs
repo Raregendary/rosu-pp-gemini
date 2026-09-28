@@ -86,9 +86,31 @@ impl Aim {
     /// `objects` stays the full list rather than being truncated to `take`,
     /// because evaluators look at neighbouring objects and a shortened slice
     /// would change the last processed object's difficulty.
+    //
+    // Single-aim entry point. `OsuSkills::process_all` only reaches it in the
+    // `rayon` build, where the two aims are spread as two tasks; the sequential
+    // build goes through `process_pair_all` instead.
+    #[allow(dead_code, reason = "only used by the `rayon` build")]
     pub fn process_all(&mut self, objects: &[OsuDifficultyObject<'_>], take: usize) {
         for curr in objects.iter().take(take) {
             self.process(curr, objects);
+        }
+    }
+
+    /// Runs the `include_sliders` / `!include_sliders` aim pair over the first
+    /// `take` objects.
+    ///
+    /// The pair is the unit of work, not the single aim: see
+    /// [`Self::evaluate_pair`].
+    #[allow(dead_code, reason = "only used without the `rayon` feature")]
+    pub fn process_pair_all(
+        &mut self,
+        no_sliders: &mut Aim,
+        objects: &[OsuDifficultyObject<'_>],
+        take: usize,
+    ) {
+        for curr in objects.iter().take(take) {
+            self.process_pair(no_sliders, curr, objects);
         }
     }
 
@@ -156,6 +178,7 @@ impl Aim {
         self.current_strain * Self::strain_decay(time - prev_start_time)
     }
 
+    #[allow(dead_code, reason = "single-aim path; see `process`")]
     fn strain_value_at(
         &mut self,
         curr: &OsuDifficultyObject<'_>,
@@ -165,9 +188,23 @@ impl Aim {
             return 0.0;
         }
 
+        let adjusted = self.calculate_adjusted_difficulty(curr, diff_objects);
+        self.strain_value_at_from(curr, adjusted)
+    }
+
+    /// The tail of [`Self::strain_value_at`], with the adjusted difficulty
+    /// already evaluated.
+    ///
+    /// Split out so [`Self::process_pair`] can hand in the value it computed for
+    /// both aims at once. The arithmetic and its order are unchanged.
+    fn strain_value_at_from(&mut self, curr: &OsuDifficultyObject<'_>, adjusted: f64) -> f64 {
+        if self.is_autopilot {
+            return 0.0;
+        }
+
         let num = Self::strain_decay(curr.adjusted_delta_time);
         self.current_strain *= num;
-        self.current_strain += self.calculate_adjusted_difficulty(curr, diff_objects) * (1.0 - num);
+        self.current_strain += adjusted * (1.0 - num);
 
         if curr.base.is_slider() {
             self.slider_strains.push(self.current_strain);
@@ -181,11 +218,19 @@ impl Aim {
         curr: &OsuDifficultyObject<'_>,
         diff_objects: &[OsuDifficultyObject<'_>],
     ) -> f64 {
-        let snap_difficulty =
-            SnapAimEvaluator::evaluate_diff_of(curr, diff_objects, self.include_sliders, &self.ctx)
-                * 70.9;
-        let agility_difficulty =
-            AgilityEvaluator::evaluate_diff_of(curr, diff_objects, &self.ctx) * 2.35;
+        let snap_difficulty = SnapAimEvaluator::evaluate_diff_of(
+            curr,
+            diff_objects,
+            self.include_sliders,
+            Self::snap_high_bpm_bonus(curr),
+            &self.ctx,
+        ) * 70.9;
+        let agility_difficulty = AgilityEvaluator::evaluate_diff_of(
+            curr,
+            diff_objects,
+            Self::agility_high_bpm_bonus(curr),
+            &self.ctx,
+        ) * 2.35;
         let flow_difficulty =
             FlowAimEvaluator::evaluate_diff_of(curr, diff_objects, self.include_sliders, &self.ctx)
                 * 242.0;
@@ -193,6 +238,16 @@ impl Aim {
         let num = self.calculate_total_value(snap_difficulty, agility_difficulty, flow_difficulty);
 
         num * self.ctx.aim_od_factor
+    }
+
+    #[inline]
+    fn snap_high_bpm_bonus(curr: &OsuDifficultyObject<'_>) -> f64 {
+        SnapAimEvaluator::high_bpm_bonus(curr.adjusted_delta_time)
+    }
+
+    #[inline]
+    fn agility_high_bpm_bonus(curr: &OsuDifficultyObject<'_>) -> f64 {
+        AgilityEvaluator::high_bpm_bonus(curr.adjusted_delta_time)
     }
 
     fn calculate_total_value(
@@ -228,10 +283,27 @@ impl Aim {
         logistic_exp(-7.27 * ratio.ln(), None)
     }
 
+    #[allow(dead_code, reason = "single-aim path; see `process`")]
     pub fn process(
         &mut self,
         curr: &OsuDifficultyObject<'_>,
         diff_objects: &[OsuDifficultyObject<'_>],
+    ) {
+        let adjusted = if self.is_autopilot {
+            0.0
+        } else {
+            self.calculate_adjusted_difficulty(curr, diff_objects)
+        };
+
+        self.process_from(curr, diff_objects, adjusted);
+    }
+
+    /// [`Self::process`] with the adjusted difficulty already evaluated.
+    fn process_from(
+        &mut self,
+        curr: &OsuDifficultyObject<'_>,
+        diff_objects: &[OsuDifficultyObject<'_>],
+        adjusted: f64,
     ) {
         if curr.idx == 0 {
             self.timeline_section_end = (curr.start_time / 400.0).ceil() * 400.0;
@@ -247,7 +319,7 @@ impl Aim {
         if curr.idx == 0 {
             self.current_section_begin = curr.start_time;
             self.current_section_end = self.current_section_begin + self.max_section_length;
-            self.current_section_peak = self.strain_value_at(curr, diff_objects);
+            self.current_section_peak = self.strain_value_at_from(curr, adjusted);
             self.object_difficulties.push(self.current_section_peak);
             self.timeline_section_peak = self.current_section_peak;
             return;
@@ -255,7 +327,7 @@ impl Aim {
 
         self.backfill_peaks(curr, diff_objects);
 
-        let num = self.strain_value_at(curr, diff_objects);
+        let num = self.strain_value_at_from(curr, adjusted);
         self.object_difficulties.push(num);
         self.timeline_section_peak = f64::max(self.timeline_section_peak, num);
 
@@ -274,6 +346,130 @@ impl Aim {
             }
             self.queued_strains.push((num, curr.start_time));
         }
+    }
+
+    /// Runs both aims over a single object, sharing the evaluator work that
+    /// does not depend on `include_sliders`.
+    ///
+    /// `self` must be the `include_sliders` aim and `no_sliders` the other one;
+    /// they are built that way by [`OsuSkills::new`](super::OsuSkills::new) and
+    /// are never mixed up.
+    pub fn process_pair(
+        &mut self,
+        no_sliders: &mut Aim,
+        curr: &OsuDifficultyObject<'_>,
+        diff_objects: &[OsuDifficultyObject<'_>],
+    ) {
+        debug_assert!(self.include_sliders);
+        debug_assert!(!no_sliders.include_sliders);
+
+        if self.is_autopilot {
+            // `strain_value_at` returns `0.0` before reaching any evaluator, so
+            // there is nothing to compute and both aims stay at zero strain.
+            self.process_from(curr, diff_objects, 0.0);
+            no_sliders.process_from(curr, diff_objects, 0.0);
+            return;
+        }
+
+        let (with, without) = self.evaluate_pair(curr, diff_objects);
+
+        self.process_from(curr, diff_objects, with);
+        no_sliders.process_from(curr, diff_objects, without);
+    }
+
+    /// The two [`Self::calculate_adjusted_difficulty`] results, evaluated with
+    /// the duplicated work removed.
+    ///
+    /// The two aims differ only by the `with_slider_travel_distance` flag, and
+    /// that flag only reaches three places in the two evaluators it feeds:
+    ///
+    /// * `AgilityEvaluator` does not read the flag at all, so its result is
+    ///   literally the same expression twice.
+    /// * In `SnapAimEvaluator` and `FlowAimEvaluator` the flag selects between
+    ///   `lazy_jump_dist` and `jump_dist` (on the current and the previous
+    ///   object) and gates three `if` bodies that are all `is_slider()` checks.
+    ///
+    /// So whenever neither object is a slider *and* the two jump distances
+    /// agree, the `false` path is textually the `true` path with equal
+    /// operands - every `&& with_slider_travel_distance` body is skipped and
+    /// `num`/`num4` are the same values. That case is evaluated once and the
+    /// single result handed to both aims.
+    ///
+    /// For a non-slider previous object `get_end_cursor_pos` returns
+    /// `stacked_pos()`, so `lazy_jump_dist` and `jump_dist` are the same length
+    /// of a negated difference - bit-identical, not merely close. The equality
+    /// is still tested explicitly so that a change to the difficulty object's
+    /// distance computation can only ever make this fall back, never silently
+    /// produce a different value.
+    fn evaluate_pair(
+        &self,
+        curr: &OsuDifficultyObject<'_>,
+        diff_objects: &[OsuDifficultyObject<'_>],
+    ) -> (f64, f64) {
+        // Evaluated once here rather than inside the evaluators, because both
+        // aim variants multiply by the same value and the non-shared case below
+        // runs each evaluator twice.
+        let snap_bonus = Self::snap_high_bpm_bonus(curr);
+        let agility_bonus = Self::agility_high_bpm_bonus(curr);
+
+        let agility =
+            AgilityEvaluator::evaluate_diff_of(curr, diff_objects, agility_bonus, &self.ctx) * 2.35;
+
+        if Self::sharable_between_aims(curr, diff_objects) {
+            let snap =
+                SnapAimEvaluator::evaluate_diff_of(curr, diff_objects, true, snap_bonus, &self.ctx)
+                    * 70.9;
+            let flow =
+                FlowAimEvaluator::evaluate_diff_of(curr, diff_objects, true, &self.ctx) * 242.0;
+
+            // Identical inputs, identical `is_touch_device` / `is_relax`, so
+            // identical output: there is no reason to run it twice.
+            let total = self.calculate_total_value(snap, agility, flow) * self.ctx.aim_od_factor;
+
+            return (total, total);
+        }
+
+        let snap =
+            SnapAimEvaluator::evaluate_diff_of(curr, diff_objects, true, snap_bonus, &self.ctx)
+                * 70.9;
+        let flow = FlowAimEvaluator::evaluate_diff_of(curr, diff_objects, true, &self.ctx) * 242.0;
+        let with = self.calculate_total_value(snap, agility, flow) * self.ctx.aim_od_factor;
+
+        let snap =
+            SnapAimEvaluator::evaluate_diff_of(curr, diff_objects, false, snap_bonus, &self.ctx)
+                * 70.9;
+        let flow = FlowAimEvaluator::evaluate_diff_of(curr, diff_objects, false, &self.ctx) * 242.0;
+        let without = self.calculate_total_value(snap, agility, flow) * self.ctx.aim_od_factor;
+
+        (with, without)
+    }
+
+    /// Whether the two aim evaluators are guaranteed to agree for this object.
+    ///
+    /// Deliberately conservative: a `false` result only costs the duplicated
+    /// work that already happens today.
+    #[allow(
+        clippy::float_cmp,
+        reason = "the distances are equal bit-for-bit here, and the check exists to prove it rather than to approximate it"
+    )]
+    fn sharable_between_aims(
+        curr: &OsuDifficultyObject<'_>,
+        diff_objects: &[OsuDifficultyObject<'_>],
+    ) -> bool {
+        // Below `idx == 2` both evaluators return `0.0` before reading anything
+        // flag dependent, and `idx == 0` has no previous object to compare to.
+        if curr.idx <= 1 {
+            return true;
+        }
+
+        let Some(prev) = diff_objects.get(curr.idx - 1) else {
+            return true;
+        };
+
+        !curr.base.is_slider()
+            && !prev.base.is_slider()
+            && curr.lazy_jump_dist == curr.jump_dist
+            && prev.lazy_jump_dist == prev.jump_dist
     }
 
     fn backfill_peaks(

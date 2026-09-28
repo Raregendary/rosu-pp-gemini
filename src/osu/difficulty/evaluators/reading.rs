@@ -9,10 +9,13 @@ use crate::{
 pub struct ReadingEvaluator;
 
 impl ReadingEvaluator {
+    /// `high_bpm_bonus` is passed in rather than computed here; see
+    /// [`SnapAimEvaluator::evaluate_diff_of`](super::SnapAimEvaluator::evaluate_diff_of).
     pub fn evaluate_diff_of<'a>(
         curr: &'a OsuDifficultyObject<'a>,
         diff_objects: &'a [OsuDifficultyObject<'a>],
         hidden: bool,
+        high_bpm_bonus: f64,
         ctx: &OsuDifficultyContext,
     ) -> f64 {
         if curr.base.is_spinner() || curr.idx == 0 {
@@ -55,7 +58,11 @@ impl ReadingEvaluator {
             ctx.preempt_difficulty,
         );
 
-        norm(1.5, [num3, num2, num]) * Self::high_bpm_bonus(curr.adjusted_delta_time)
+        norm(1.5, [num3, num2, num]) * high_bpm_bonus
+    }
+
+    pub(crate) fn high_bpm_bonus(ms: f64) -> f64 {
+        1.0 / (1.0 - 0.8_f64.powf(ms / 1000.0))
     }
 
     fn calculate_density_difficulty(
@@ -67,7 +74,7 @@ impl ReadingEvaluator {
     ) -> f64 {
         let mut num = current_visible_object_density.sqrt();
         if let Some(next) = next_obj {
-            num *= smootherstep(next.lazy_jump_dist, 15.0, 150.0);
+            num *= next.reading_density_scale;
         }
 
         let mut num2 = (past_object_difficulty_influence + num).powf(1.7)
@@ -131,7 +138,7 @@ impl ReadingEvaluator {
             }
 
             let mut num2 = curr_obj.opacity_at(item.base.start_time, false, ctx);
-            num2 *= smootherstep(item.lazy_jump_dist, 15.0, 150.0);
+            num2 *= item.reading_density_scale;
             let time_nerf_factor =
                 Self::get_time_nerf_factor(curr_obj.start_time - item.start_time);
             num2 *= time_nerf_factor;
@@ -235,10 +242,15 @@ impl ReadingEvaluator {
     }
 
     fn get_time_nerf_factor(delta_time: f64) -> f64 {
-        (2.0 - delta_time / 1500.0).clamp(0.0, 1.0)
-    }
+        // `delta_time <= 1500.0` gives `2.0 - delta_time / 1500.0 >= 1.0`, which
+        // the clamp turns into `1.0` - so the whole expression is exactly `1.0`
+        // there and the division can be skipped. That is the common case: this
+        // runs once per object inside the visibility window, and consecutive
+        // objects are almost always well under 1.5 seconds apart.
+        if delta_time <= 1500.0 {
+            return 1.0;
+        }
 
-    fn high_bpm_bonus(ms: f64) -> f64 {
-        1.0 / (1.0 - 0.8_f64.powf(ms / 1000.0))
+        (2.0 - delta_time / 1500.0).clamp(0.0, 1.0)
     }
 }

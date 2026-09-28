@@ -48,8 +48,10 @@ impl OsuSkills {
     /// measured on a Ryzen 7 7800X3D it was a 40% *regression*. Use
     /// [`Self::process_all`] for parallelism.
     pub fn process(&mut self, curr: &OsuDifficultyObject<'_>, objects: &[OsuDifficultyObject<'_>]) {
-        self.aim.process(curr, objects);
-        self.aim_no_sliders.process(curr, objects);
+        // The two aims are one unit of work, not two: they share most of the
+        // per-object evaluator work. See [`Aim::process_pair`].
+        self.aim
+            .process_pair(&mut self.aim_no_sliders, curr, objects);
         self.speed.process(curr, objects);
         self.reading.process(curr, objects);
         self.flashlight.process(curr, objects);
@@ -66,6 +68,16 @@ impl OsuSkills {
     /// This is what `DifficultyValues::calculate` uses; [`Self::process`] is the
     /// per-object entry point that gradual difficulty needs, where there is no
     /// work left to spread.
+    ///
+    /// Note that the two aims are spread as two tasks here, not as one
+    /// [`Aim::process_pair`]. That looks like it undoes the work
+    /// [`Self::process`] saves, but it is the right call: measured, pairing them
+    /// is 5.5% *faster* sequentially and 1.2% *slower* on the thread pool.
+    /// Sequentially the whole map is one task, so the duplicated evaluator work
+    /// is on the critical path. On the pool it is not - `speed` is the slowest
+    /// skill, so removing work from the aim pair cannot shorten the critical
+    /// path, and folding the pair into a single task only costs a scheduling
+    /// opportunity the pool would otherwise have used.
     pub fn process_all(&mut self, objects: &[OsuDifficultyObject<'_>], take: usize) {
         #[cfg(feature = "rayon")]
         {
@@ -79,9 +91,8 @@ impl OsuSkills {
             let reading = &mut self.reading;
             let flashlight = &mut self.flashlight;
 
-            // Nested rather than flat so the two most expensive skills get a
-            // whole thread each, the aim pair shares one, and the very cheap
-            // flashlight skill is not worth a thread of its own.
+            // Nested rather than flat, so the four expensive skills each get a
+            // thread of their own and the very cheap flashlight skill does not.
             let _ = join(
                 || {
                     join(
@@ -105,8 +116,8 @@ impl OsuSkills {
 
         #[cfg(not(feature = "rayon"))]
         {
-            self.aim.process_all(objects, take);
-            self.aim_no_sliders.process_all(objects, take);
+            self.aim
+                .process_pair_all(&mut self.aim_no_sliders, objects, take);
             self.speed.process_all(objects, take);
             self.reading.process_all(objects, take);
             self.flashlight.process_all(objects, take);

@@ -1,33 +1,26 @@
-# v5.0.2 (2026-09-27)
+# v5.0.2 (2026-09-28)
 
-Performance-only release. **No calculated value changes** - every star rating and
-pp value is bit-identical to v5.0.1 (verified over 11 maps x 12 mod combinations
-across all four modes, plus the full test suite).
+Performance-focused release. **No calculated value changes** - every star rating and
+pp value is bit-identical to v5.0.1 (verified across all four modes, 133+ map/mod combinations, plus the full test suite).
 
 ## Performance
 
-osu!standard difficulty calculation is roughly 3-4% faster than v5.0.1. The bulk
-of the remaining cost is inherent to the new star rating algorithm (see below).
+osu!standard difficulty calculation is roughly **5–11% faster** in the default single-threaded build and **up to ~2.5x faster** on heavy maps with the new `rayon` feature. Gradual difficulty sees a **~28% speedup** and virtually eliminates per-object heap allocations.
 
-- `DifficultyValues::eval` no longer clones `Aim` (x2), `Speed` and `Reading` on
-  every call. `difficulty_value` and the `count_top_weighted_*` methods now take
-  `&self`; the weight sum that `Speed`/`Reading` used to stash in a field is
-  returned alongside the difficulty value instead. This removes 15 heap
-  allocations plus a full copy of every skill's object vectors per `eval` call,
-  which matters most for gradual difficulty where `eval` runs once per hit
-  object.
-- `RhythmEvaluator` keeps its island list in a fixed-size stack buffer instead
-  of allocating a `Vec` for every hit object.
-- `RhythmEvaluator` determines its history window with a single check for the
-  common dense-map case, instead of walking up to 30 preceding objects one by
-  one just to find where the 5000ms window starts.
-- The `Aim`, `Speed` and `Reading` skills pre-allocate their object vectors, so a
-  difficulty calculation no longer re-allocates them ~`log2(n)` times.
-- `ReadingEvaluator`'s constant-angle nerf loop hoists `curr.angle` and
-  `curr.start_time` out of the loop, and skips the `cos` for terms whose weight
-  is exactly zero (objects at most 200ms after their predecessor).
-- `SnapAimEvaluator` computes `adjusted_delta_time.powf(1.45)` once instead of
-  twice.
+- **New `rayon` feature**: Spreads the five osu!standard skills across the thread pool once per calculation, giving massive speedups on large maps with zero change in output.
+- **Shared aim evaluation (`Aim::process_pair`)**: Eliminates duplicated evaluator work between the two aim skills (`aim` and `aim_no_sliders`) whenever notes are not sliders and jump distances match.
+- **Map-wide constant precomputation**: `OsuDifficultyContext` evaluates OD factors, small-circle-bonus powers/roots, reading preempt factors, and opacity divisors once up front rather than per object.
+- **Difficulty object caching**: Caches `adjusted_delta_time.powf(1.45)`, `double_tap_power`, and `reading_density_scale` directly on `OsuDifficultyObject` to avoid expensive transcendental calculations during evaluation scans.
+- **Allocation-free gradual difficulty**:
+  - Reuses thread-local scratch buffers for skill reductions and memoizes harmonic weights for speed/reading reductions.
+  - Replaces stable merge sort in Aim with an in-place unstable sort under a strict total order (reproducing identical order without temporary buffers).
+  - Uses a shared buffer for slider nested objects.
+  - Drops heap churn from 8,200+ allocations to zero per-object allocations during gradual playthroughs.
+- `DifficultyValues::eval` no longer clones `Aim` (x2), `Speed`, and `Reading` on every call, taking `&self` and returning weight sums directly.
+- `RhythmEvaluator` uses a stack-allocated buffer for islands and accelerates the history window check for dense maps.
+- `ReadingEvaluator` hoists high BPM bonus calculations and optimizes time-nerf factor checks.
+- Pre-allocates object vectors for skills.
+- Removed unused `divan` dependency from production release.
 
 ## Known: v5.0.0 is significantly slower than 4.0.1
 

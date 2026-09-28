@@ -95,8 +95,13 @@ impl Reading {
         curr: &OsuDifficultyObject<'_>,
         diff_objects: &[OsuDifficultyObject<'_>],
     ) -> f64 {
-        let mut num =
-            ReadingEvaluator::evaluate_diff_of(curr, diff_objects, self.has_hidden_mod, &self.ctx);
+        let mut num = ReadingEvaluator::evaluate_diff_of(
+            curr,
+            diff_objects,
+            self.has_hidden_mod,
+            ReadingEvaluator::high_bpm_bonus(curr.adjusted_delta_time),
+            &self.ctx,
+        );
 
         if self.is_touch_device {
             num = num.powf(0.89);

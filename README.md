@@ -9,35 +9,58 @@
 
 Benchmark conducted between **`osu-tools`** (.NET 8.0 Release) and **`rosu-pp`** (Rust Release) on official osu! beatmaps above 5–6★ across all four game modes (warmup iterations followed by 50 timed iterations for Decoding & Difficulty, and 500 timed iterations for Performance):
 
+All cells are **median / mean** per calculation.
+
 ### 1. Decoding (.osu Beatmap Parser)
 
-| Gamemode / Beatmap | `osu-tools` (Median / Mean) | `rosu-pp` (Median / Mean) | Speedup |
-| :--- | :--- | :--- | :--- |
-| **osu! standard (5525390, 6.24★)** | 15.57 ms / 15.80 ms | **0.82 ms / 0.85 ms** | **~19.0x faster** |
-| **osu! standard (3700073, 8.73★)** | 6.35 ms / 8.06 ms | **0.96 ms / 0.96 ms** | **~6.6x faster** |
-| **osu!taiko (5727828, 7.59★)** | 4.20 ms / 4.60 ms | **0.59 ms / 0.62 ms** | **~7.1x faster** |
-| **osu!catch (4384622, 6.02★)** | 3.59 ms / 4.41 ms | **0.77 ms / 0.81 ms** | **~4.7x faster** |
-| **osu!mania (5873946, 5.91★)** | 5.23 ms / 5.73 ms | **1.04 ms / 1.06 ms** | **~5.0x faster** |
+| Beatmap | `osu-tools` (ms) | `rosu-pp` (ms) | Faster by |
+| :--- | ---: | ---: | ---: |
+| **osu! std 5525390 · 6.24★** | 15.57 / 15.80 | 0.82 / 0.85 | ~19.0x |
+| **osu! std 3700073 · 8.73★** | 6.35 / 8.06 | 0.96 / 0.96 | ~6.6x |
+| **osu!taiko 5727828 · 7.59★** | 4.20 / 4.60 | 0.59 / 0.62 | ~7.1x |
+| **osu!catch 4384622 · 6.02★** | 3.59 / 4.41 | 0.77 / 0.81 | ~4.7x |
+| **osu!mania 5873946 · 5.91★** | 5.23 / 5.73 | 1.04 / 1.06 | ~5.0x |
 
 ### 2. Difficulty Calculation (Star Rating & Skills)
 
-| Gamemode / Beatmap | `osu-tools` (Median / Mean) | `rosu-pp` (Median / Mean) | Speedup |
-| :--- | :--- | :--- | :--- |
-| **osu! standard (5525390, 6.24★)** | 19.56 ms / 21.55 ms | **2.47 ms / 2.50 ms** | **~7.9x faster** |
-| **osu! standard (3700073, 8.73★)** | 15.75 ms / 17.54 ms | **9.77 ms / 9.71 ms** | **~1.6x faster** |
-| **osu!taiko (5727828, 7.59★)** | 6.47 ms / 7.39 ms | **1.65 ms / 1.72 ms** | **~3.9x faster** |
-| **osu!catch (4384622, 6.02★)** | 6.20 ms / 8.49 ms | **0.42 ms / 0.42 ms** | **~14.8x faster** |
-| **osu!mania (5873946, 5.91★)** | 5.34 ms / 6.63 ms | **3.22 ms / 3.21 ms** | **~1.7x faster** |
+| Beatmap | `osu-tools` (ms) | `rosu-pp` (ms) | `+` `rayon` (ms) | Faster by |
+| :--- | ---: | ---: | ---: | ---: |
+| **osu! std 5525390 · 6.24★** | 19.56 / 21.55 | 2.44 / 2.48 | 1.55 / 1.62 | ~8.0x (~12.6x) |
+| **osu! std 3700073 · 8.73★** | 15.75 / 17.54 | 8.74 / 8.73 | 3.97 / 4.00 | ~1.8x (~4.0x) |
+| **osu!taiko 5727828 · 7.59★** | 6.47 / 7.39 | 1.65 / 1.72 | – | ~3.9x |
+| **osu!catch 4384622 · 6.02★** | 6.20 / 8.49 | 0.42 / 0.42 | – | ~14.8x |
+| **osu!mania 5873946 · 5.91★** | 5.34 / 6.63 | 3.22 / 3.21 | – | ~1.7x |
+
+The `rayon` column is only defined for osu!standard: it is the one place the
+crate is parallel, namely the five osu!standard skill passes. Decoding, the pp
+calculation itself, and the other three modes have no thread pool to spread
+across and are unaffected — turning the feature on changes nothing for them.
+"Faster by" quotes the default build, with the `rayon` build in parentheses.
+
+Against the previous 5.0.2 release, osu!standard difficulty is **5–11% faster**
+without the feature and **2.3–2.5x faster** on the heavy maps with it. The
+other modes are unchanged: their measured difference is within ±3%, i.e. code
+layout noise, because no code they execute was touched.
 
 ### 3. Performance (PP) Calculation
 
-| Gamemode / Beatmap | `osu-tools` (Median / Mean) | `rosu-pp` (Median / Mean) | Speedup |
-| :--- | :--- | :--- | :--- |
-| **osu! standard (5525390, 6.24★)** | 2.00 µs / 2.17 µs | **0.40 µs / 0.38 µs** | **~5.0x faster** |
-| **osu! standard (3700073, 8.73★)** | 1.50 µs / 2.01 µs | **0.40 µs / 0.44 µs** | **~3.8x faster** |
-| **osu!taiko (5727828, 7.59★)** | 0.30 µs / 0.35 µs | **0.30 µs / 0.32 µs** | **~1.0x (parity)** |
-| **osu!catch (4384622, 6.02★)** | 0.50 µs / 0.54 µs | **0.10 µs / 0.11 µs** | **~5.0x faster** |
-| **osu!mania (5873946, 5.91★)** | 0.20 µs / 0.19 µs | **0.10 µs / 0.10 µs** | **~2.0x faster** |
+| Beatmap | `osu-tools` (µs) | `rosu-pp` (µs) | Faster by |
+| :--- | ---: | ---: | ---: |
+| **osu! std 5525390 · 6.24★** | 2.00 / 2.17 | 0.40 / 0.38 | ~5.0x |
+| **osu! std 3700073 · 8.73★** | 1.50 / 2.01 | 0.40 / 0.44 | ~3.8x |
+| **osu!taiko 5727828 · 7.59★** | 0.30 / 0.35 | 0.30 / 0.32 | ~1.0x (parity) |
+| **osu!catch 4384622 · 6.02★** | 0.50 / 0.54 | 0.10 / 0.11 | ~5.0x |
+| **osu!mania 5873946 · 5.91★** | 0.20 / 0.19 | 0.10 / 0.10 | ~2.0x |
+
+> **How the rosu-pp figures were obtained.** The `osu-tools` column and the
+> preceding release's `rosu-pp` column come from the original measurement
+> session. The current `rosu-pp` and `+rayon` columns are those published values
+> scaled by a factor measured in a fresh run that interleaves the two builds
+> sample-for-sample in one process, so the factor is not subject to clock drift.
+> The ratios are sound; the absolute `rosu-pp` times still carry the original
+> session's baseline. Re-measuring the .NET side needs the
+> `PerformanceCalculatorGUI`, which has no scriptable harness.
+
 
 ---
 
@@ -253,6 +276,7 @@ Calculating performances: Median: 40.57µs | Mean: 43.41µs
 | Flag          | Description         | Dependencies
 | ------------- | ------------------- | ------------
 | `default`     | No features enabled |
+| `rayon`       | Spreads the five osu!standard difficulty skills across a thread pool, which makes osu!standard difficulty calculation up to ~2.5x faster on large maps. Results are bit-identical either way. It costs a little on very small maps, so it is off by default. Only osu!standard difficulty is parallel; the other modes and the performance calculation are unaffected. | [`rayon`]
 | `sync`        | Some gradual calculation types can only be shared across threads if this feature is enabled. This feature adds a small performance penalty. |
 | `tracing`     | Any error encountered during beatmap decoding will be logged through `tracing::error`. If this feature is **not** enabled, errors will be ignored. | [`tracing`]
 
@@ -266,6 +290,7 @@ Using `rosu-pp` from other languages than Rust:
 [osu!lazer]: https://github.com/ppy/osu
 [osu!tools]: https://github.com/ppy/osu-tools
 [`tracing`]: https://docs.rs/tracing
+[`rayon`]: https://docs.rs/rayon
 [rosu-pp-js]: https://github.com/MaxOhn/rosu-pp-js
 [rosu-pp-py]: https://github.com/MaxOhn/rosu-pp-py
 [benchmark]: https://gist.github.com/MaxOhn/625af10011f6d7e13a171b08ccf959ff

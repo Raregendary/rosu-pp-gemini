@@ -5,7 +5,7 @@ use rosu_map::util::Pos;
 use crate::{
     any::difficulty::object::{HasStartTime, IDifficultyObject},
     osu::object::{OsuObject, OsuObjectKind},
-    util::difficulty::reverse_lerp,
+    util::difficulty::{reverse_lerp, smootherstep},
 };
 
 use super::{context::OsuDifficultyContext, scaling_factor::ScalingFactor};
@@ -42,6 +42,13 @@ pub struct OsuDifficultyObject<'a> {
     /// The exponent of [`Self::calculate_double_tap_feasibility`], which depends
     /// only on `self` and is therefore computed once up front.
     pub double_tap_power: f64,
+    /// `smootherstep(lazy_jump_dist, 15.0, 150.0)`.
+    ///
+    /// The reading evaluator applies this to every object inside the visibility
+    /// window, which is a different object on every call, so caching it on the
+    /// difficulty object replaces one `smootherstep` per element per call with
+    /// one field read.
+    pub reading_density_scale: f64,
 }
 
 impl<'a> OsuDifficultyObject<'a> {
@@ -92,6 +99,7 @@ impl<'a> OsuDifficultyObject<'a> {
             radius: scaling_factor.radius,
             adjusted_delta_time_pow_145: 0.0,
             double_tap_power: 0.0,
+            reading_density_scale: 0.0,
         };
 
         this.compute_slider_cursor_pos(scaling_factor.radius);
@@ -103,8 +111,9 @@ impl<'a> OsuDifficultyObject<'a> {
             scaling_factor,
         );
 
-        // Both of these depend on fields that `set_distances` only just filled in.
+        // All of these depend on fields that `set_distances` only just filled in.
         this.adjusted_delta_time_pow_145 = this.adjusted_delta_time.powf(1.45);
+        this.reading_density_scale = smootherstep(this.lazy_jump_dist, 15.0, 150.0);
         this.double_tap_power = {
             // `delta_time.max(1.0)`, not `adjusted_delta_time`: the two differ
             // whenever the raw delta time is below the minimum strain time.
@@ -142,6 +151,26 @@ impl<'a> OsuDifficultyObject<'a> {
         let num = self.delta_time.max(1.0);
         let val = (next.delta_time.max(1.0) - num).abs();
         let x = num / num.max(val);
+
+        // `x == 1.0` gives `1.0 - 1.0.powf(p) == 0.0` for every exponent `p`,
+        // including `NaN` and the infinities, so the result is exactly `0.0`
+        // and both callers multiply by `1.0 - 0.0 * k`, which is a no-op. The
+        // `powf` is therefore unobservable and can be skipped.
+        //
+        // The test is on `x` rather than on `val <= num` so that a `NaN`
+        // denominator still falls through to the original expression instead of
+        // silently taking the shortcut.
+        //
+        // This is the common case, not a rare one: `x == 1.0` whenever the
+        // neighbouring delta time is within a factor of two, which covers every
+        // stream that speeds up or holds a steady rate.
+        #[allow(
+            clippy::float_cmp,
+            reason = "exact equality is the condition being tested for; an approximate one would change the result"
+        )]
+        if x == 1.0 {
+            return 0.0;
+        }
 
         1.0 - x.powf(self.double_tap_power)
     }

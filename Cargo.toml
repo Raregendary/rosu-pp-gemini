@@ -23,7 +23,6 @@ tracing = ["rosu-map/tracing"]
 rayon = ["dep:rayon"]
 
 [dependencies]
-divan = "0.1.21"
 rayon = { version = "1.11", optional = true }
 rosu-map = { version = "0.2.1" }
 rosu-mods = { version = "0.4.0" }
