@@ -170,7 +170,7 @@ impl DifficultyValues {
         let take_diff_objects = cmp::min(map.hit_objects.len(), take).saturating_sub(1);
 
         #[cfg(feature = "rayon")]
-        if difficulty.is_parallel() {
+        if difficulty.should_parallelize(take_diff_objects) {
             skills.process_all_parallel(&diff_objects, take_diff_objects);
         } else {
             skills.process_all_sequential(&diff_objects, take_diff_objects);

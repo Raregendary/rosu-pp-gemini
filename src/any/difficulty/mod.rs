@@ -269,11 +269,15 @@ impl Difficulty {
         self
     }
 
+    /// Threshold below which sequential evaluation is faster than thread dispatch.
     #[cfg(feature = "rayon")]
-    pub(crate) const fn is_parallel(&self) -> bool {
+    pub const RAYON_MIN_OBJECTS: usize = 70;
+
+    #[cfg(feature = "rayon")]
+    pub(crate) const fn should_parallelize(&self, object_count: usize) -> bool {
         match self.parallel {
             Some(p) => p,
-            None => true,
+            None => object_count >= Self::RAYON_MIN_OBJECTS,
         }
     }
 
