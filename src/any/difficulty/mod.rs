@@ -60,6 +60,8 @@ pub struct Difficulty {
     map_difficulty: BeatmapDifficulty,
     hardrock_offsets: Option<bool>,
     lazer: Option<bool>,
+    #[cfg(feature = "rayon")]
+    parallel: Option<bool>,
 }
 
 impl Difficulty {
@@ -72,6 +74,8 @@ impl Difficulty {
             map_difficulty: BeatmapDifficulty::DEFAULT,
             hardrock_offsets: None,
             lazer: None,
+            #[cfg(feature = "rayon")]
+            parallel: None,
         }
     }
 
@@ -85,6 +89,8 @@ impl Difficulty {
             map_difficulty,
             hardrock_offsets,
             lazer,
+            #[cfg(feature = "rayon")]
+                parallel: _,
         } = self;
 
         InspectDifficulty {
@@ -250,6 +256,25 @@ impl Difficulty {
         self.lazer = Some(lazer);
 
         self
+    }
+
+    /// Whether to run difficulty calculation across Rayon's thread pool when
+    /// the `rayon` feature is active.
+    ///
+    /// Defaults to `true`.
+    #[cfg(feature = "rayon")]
+    pub const fn parallel(mut self, parallel: bool) -> Self {
+        self.parallel = Some(parallel);
+
+        self
+    }
+
+    #[cfg(feature = "rayon")]
+    pub(crate) const fn is_parallel(&self) -> bool {
+        match self.parallel {
+            Some(p) => p,
+            None => true,
+        }
     }
 
     /// Perform the difficulty calculation.
@@ -418,6 +443,8 @@ impl Debug for Difficulty {
             map_difficulty,
             hardrock_offsets,
             lazer,
+            #[cfg(feature = "rayon")]
+                parallel: _,
         } = self;
 
         f.debug_struct("Difficulty")

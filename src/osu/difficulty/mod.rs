@@ -169,12 +169,15 @@ impl DifficultyValues {
         // The first hit object has no difficulty object
         let take_diff_objects = cmp::min(map.hit_objects.len(), take).saturating_sub(1);
 
-        // With the `rayon` feature the five skills are run on separate threads
-        // for the whole calculation at once. They are independent of each other
-        // and each is sequential in the objects, so this is the only parallelism
-        // available - and doing it here rather than per hit object is the
-        // difference between ~5 synchronisation points and thousands.
-        skills.process_all(&diff_objects, take_diff_objects);
+        #[cfg(feature = "rayon")]
+        if difficulty.is_parallel() {
+            skills.process_all_parallel(&diff_objects, take_diff_objects);
+        } else {
+            skills.process_all_sequential(&diff_objects, take_diff_objects);
+        }
+
+        #[cfg(not(feature = "rayon"))]
+        skills.process_all_sequential(&diff_objects, take_diff_objects);
 
         Self {
             osu_objects,

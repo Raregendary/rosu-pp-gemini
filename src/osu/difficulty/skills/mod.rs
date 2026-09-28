@@ -78,49 +78,55 @@ impl OsuSkills {
     /// skill, so removing work from the aim pair cannot shorten the critical
     /// path, and folding the pair into a single task only costs a scheduling
     /// opportunity the pool would otherwise have used.
+    #[allow(dead_code, reason = "fallback / generic process entry")]
     pub fn process_all(&mut self, objects: &[OsuDifficultyObject<'_>], take: usize) {
         #[cfg(feature = "rayon")]
-        {
-            use rayon::join;
-
-            // Borrow the fields individually: that is what makes the parallelism
-            // safe, since each closure gets exclusive access to one skill.
-            let aim = &mut self.aim;
-            let aim_no_sliders = &mut self.aim_no_sliders;
-            let speed = &mut self.speed;
-            let reading = &mut self.reading;
-            let flashlight = &mut self.flashlight;
-
-            // Nested rather than flat, so the four expensive skills each get a
-            // thread of their own and the very cheap flashlight skill does not.
-            let _ = join(
-                || {
-                    join(
-                        || aim.process_all(objects, take),
-                        || aim_no_sliders.process_all(objects, take),
-                    )
-                },
-                || {
-                    join(
-                        || speed.process_all(objects, take),
-                        || {
-                            join(
-                                || reading.process_all(objects, take),
-                                || flashlight.process_all(objects, take),
-                            )
-                        },
-                    )
-                },
-            );
-        }
+        self.process_all_parallel(objects, take);
 
         #[cfg(not(feature = "rayon"))]
-        {
-            self.aim
-                .process_pair_all(&mut self.aim_no_sliders, objects, take);
-            self.speed.process_all(objects, take);
-            self.reading.process_all(objects, take);
-            self.flashlight.process_all(objects, take);
-        }
+        self.process_all_sequential(objects, take);
+    }
+
+    pub fn process_all_sequential(&mut self, objects: &[OsuDifficultyObject<'_>], take: usize) {
+        self.aim
+            .process_pair_all(&mut self.aim_no_sliders, objects, take);
+        self.speed.process_all(objects, take);
+        self.reading.process_all(objects, take);
+        self.flashlight.process_all(objects, take);
+    }
+
+    #[cfg(feature = "rayon")]
+    pub fn process_all_parallel(&mut self, objects: &[OsuDifficultyObject<'_>], take: usize) {
+        use rayon::join;
+
+        // Borrow the fields individually: that is what makes the parallelism
+        // safe, since each closure gets exclusive access to one skill.
+        let aim = &mut self.aim;
+        let aim_no_sliders = &mut self.aim_no_sliders;
+        let speed = &mut self.speed;
+        let reading = &mut self.reading;
+        let flashlight = &mut self.flashlight;
+
+        // Nested rather than flat, so the four expensive skills each get a
+        // thread of their own and the very cheap flashlight skill does not.
+        let _ = join(
+            || {
+                join(
+                    || aim.process_all(objects, take),
+                    || aim_no_sliders.process_all(objects, take),
+                )
+            },
+            || {
+                join(
+                    || speed.process_all(objects, take),
+                    || {
+                        join(
+                            || reading.process_all(objects, take),
+                            || flashlight.process_all(objects, take),
+                        )
+                    },
+                )
+            },
+        );
     }
 }

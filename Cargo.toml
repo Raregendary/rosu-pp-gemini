@@ -41,3 +41,7 @@ opt-level = 3
 [[bench]]
 name = "hitresult_generators"
 harness = false
+
+[[example]]
+name = "rayon_threshold_bench"
+required-features = ["rayon"]
