@@ -37,11 +37,12 @@ impl OsuObject {
         reflection: Reflection,
         curve_bufs: &mut CurveBuffers,
         ticks_buf: &mut Vec<SliderEvent>,
+        nested_buf: &mut Vec<NestedSliderObject>,
     ) -> Self {
         let kind = match h.kind {
             HitObjectKind::Circle => OsuObjectKind::Circle,
             HitObjectKind::Slider(ref slider) => OsuObjectKind::Slider(OsuSlider::new(
-                h, slider, map, reflection, curve_bufs, ticks_buf,
+                h, slider, map, reflection, curve_bufs, ticks_buf, nested_buf,
             )),
             HitObjectKind::Spinner(spinner) => OsuObjectKind::Spinner(spinner),
             HitObjectKind::Hold(HoldNote { duration }) => {
@@ -159,6 +160,7 @@ impl OsuSlider {
         reflection: Reflection,
         curve_bufs: &mut CurveBuffers,
         ticks_buf: &mut Vec<SliderEvent>,
+        nested_buf: &mut Vec<NestedSliderObject>,
     ) -> Self {
         let start_time = h.start_time;
         let slider_multiplier = map.slider_multiplier;
@@ -225,30 +227,36 @@ impl OsuSlider {
 
         let end_path_pos = path.position_at(obj_progress_at(1.0));
 
-        let mut nested_objects: Vec<_> = events
-            .filter_map(|e| {
-                let obj = match e.kind {
-                    SliderEventType::Tick => NestedSliderObject {
-                        pos: path.position_at(e.path_progress),
-                        start_time: e.time,
-                        kind: NestedSliderObjectKind::Tick,
-                    },
-                    SliderEventType::Repeat => NestedSliderObject {
-                        pos: path.position_at(e.path_progress),
-                        start_time: start_time + f64::from(e.span_idx + 1) * span_duration,
-                        kind: NestedSliderObjectKind::Repeat,
-                    },
-                    SliderEventType::Tail => NestedSliderObject {
-                        pos: end_path_pos, // no `h.pos` yet to keep order of float operations
-                        start_time: e.time,
-                        kind: NestedSliderObjectKind::Tail,
-                    },
-                    SliderEventType::Head | SliderEventType::LastTick => return None,
-                };
+        // `SliderEventsIter` has no useful `size_hint`, so collecting straight
+        // into a fresh `Vec` makes the allocator grow it a handful of times per
+        // slider. Growing one shared buffer instead - it keeps the capacity of
+        // the longest slider seen so far - and then copying out with the exact
+        // length turns that into a single allocation per slider.
+        nested_buf.clear();
+        nested_buf.extend(events.filter_map(|e| {
+            let obj = match e.kind {
+                SliderEventType::Tick => NestedSliderObject {
+                    pos: path.position_at(e.path_progress),
+                    start_time: e.time,
+                    kind: NestedSliderObjectKind::Tick,
+                },
+                SliderEventType::Repeat => NestedSliderObject {
+                    pos: path.position_at(e.path_progress),
+                    start_time: start_time + f64::from(e.span_idx + 1) * span_duration,
+                    kind: NestedSliderObjectKind::Repeat,
+                },
+                SliderEventType::Tail => NestedSliderObject {
+                    pos: end_path_pos, // no `h.pos` yet to keep order of float operations
+                    start_time: e.time,
+                    kind: NestedSliderObjectKind::Tail,
+                },
+                SliderEventType::Head | SliderEventType::LastTick => return None,
+            };
 
-                Some(obj)
-            })
-            .collect();
+            Some(obj)
+        }));
+
+        let mut nested_objects: Vec<_> = nested_buf.as_slice().to_vec();
 
         sort::csharp(&mut nested_objects, |a, b| {
             a.start_time.total_cmp(&b.start_time)

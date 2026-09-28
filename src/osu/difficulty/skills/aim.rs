@@ -2,6 +2,7 @@ use crate::{
     any::difficulty::object::IDifficultyObject,
     model::mods::GameMods,
     osu::difficulty::{
+        context::OsuDifficultyContext,
         evaluators::{AgilityEvaluator, FlowAimEvaluator, SnapAimEvaluator},
         object::OsuDifficultyObject,
     },
@@ -10,6 +11,8 @@ use crate::{
         float_ext::FloatExt,
     },
 };
+
+use super::scratch;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct StrainPeak {
@@ -22,6 +25,28 @@ impl StrainPeak {
         Self {
             value,
             section_length: section_length.round(),
+        }
+    }
+}
+
+/// A strain peak carrying the position it held before sorting.
+///
+/// The position is what turns the sort comparator into a strict total order,
+/// which is what lets [`Aim::difficulty_value`] reproduce a stable sort with
+/// `sort_unstable_by`. See the comment there.
+#[derive(Copy, Clone)]
+pub(super) struct SortablePeak {
+    value: f64,
+    section_length: f64,
+    order: u32,
+}
+
+impl From<StrainPeak> for SortablePeak {
+    fn from(peak: StrainPeak) -> Self {
+        Self {
+            value: peak.value,
+            section_length: peak.section_length,
+            order: 0,
         }
     }
 }
@@ -48,10 +73,26 @@ pub struct Aim {
     is_touch_device: bool,
     is_relax: bool,
     is_autopilot: bool,
+    ctx: OsuDifficultyContext,
 }
 
 impl Aim {
-    pub fn new(mods: &GameMods, include_sliders: bool) -> Self {
+    /// Runs [`Self::process`] over the first `take` objects.
+    ///
+    /// Exists so that [`OsuSkills::process_all`](super::OsuSkills::process_all)
+    /// can hand whole skills to a thread pool: each skill is sequential in the
+    /// objects, so spreading *skills* is the only parallelism available.
+    ///
+    /// `objects` stays the full list rather than being truncated to `take`,
+    /// because evaluators look at neighbouring objects and a shortened slice
+    /// would change the last processed object's difficulty.
+    pub fn process_all(&mut self, objects: &[OsuDifficultyObject<'_>], take: usize) {
+        for curr in objects.iter().take(take) {
+            self.process(curr, objects);
+        }
+    }
+
+    pub fn new(mods: &GameMods, include_sliders: bool, ctx: OsuDifficultyContext) -> Self {
         let decay_weight = 0.9;
         let max_section_length = 400.0;
         let max_stored_length = 11.0 / (1.0 - decay_weight);
@@ -77,11 +118,17 @@ impl Aim {
             is_touch_device: mods.td(),
             is_relax: mods.rx(),
             is_autopilot: mods.ap(),
+            ctx,
         }
     }
 
-    pub fn with_capacity(mods: &GameMods, include_sliders: bool, total_objects: usize) -> Self {
-        let mut this = Self::new(mods, include_sliders);
+    pub fn with_capacity(
+        mods: &GameMods,
+        include_sliders: bool,
+        total_objects: usize,
+        ctx: OsuDifficultyContext,
+    ) -> Self {
+        let mut this = Self::new(mods, include_sliders, ctx);
 
         // Every one of these grows by at most one entry per processed object, so
         // reserving up front avoids the repeated reallocation (and copying) that
@@ -135,15 +182,17 @@ impl Aim {
         diff_objects: &[OsuDifficultyObject<'_>],
     ) -> f64 {
         let snap_difficulty =
-            SnapAimEvaluator::evaluate_diff_of(curr, diff_objects, self.include_sliders) * 70.9;
+            SnapAimEvaluator::evaluate_diff_of(curr, diff_objects, self.include_sliders, &self.ctx)
+                * 70.9;
         let agility_difficulty =
-            AgilityEvaluator::evaluate_diff_of(curr, diff_objects) * 2.35;
+            AgilityEvaluator::evaluate_diff_of(curr, diff_objects, &self.ctx) * 2.35;
         let flow_difficulty =
-            FlowAimEvaluator::evaluate_diff_of(curr, diff_objects, self.include_sliders) * 242.0;
+            FlowAimEvaluator::evaluate_diff_of(curr, diff_objects, self.include_sliders, &self.ctx)
+                * 242.0;
 
         let num = self.calculate_total_value(snap_difficulty, agility_difficulty, flow_difficulty);
 
-        num * (0.985 + curr.overall_difficulty().max(0.0).powf(2.0) / 4000.0)
+        num * self.ctx.aim_od_factor
     }
 
     fn calculate_total_value(
@@ -288,7 +337,8 @@ impl Aim {
         &self.strain_peaks
     }
 
-    pub fn into_current_strain_peaks(mut self) -> Vec<f64> {        self.timeline_peaks.push(self.timeline_section_peak);
+    pub fn into_current_strain_peaks(mut self) -> Vec<f64> {
+        self.timeline_peaks.push(self.timeline_section_peak);
         self.timeline_peaks
     }
 
@@ -299,30 +349,21 @@ impl Aim {
     /// hit object while calculating gradual difficulty, so finalising in place
     /// would both mutate shared state and force callers to clone the whole
     /// skill.
+    #[expect(
+        dead_code,
+        reason = "kept as the readable form of `finalised_strain_peaks_into`"
+    )]
     fn finalised_strain_peaks(&self) -> Vec<StrainPeak> {
-        if self.peaks_finalised {
-            return self.strain_peaks.clone();
-        }
-
-        let mut peaks = self.strain_peaks.clone();
-        let peak = StrainPeak::new(
-            self.current_section_peak,
-            self.current_section_end - self.current_section_begin,
-        );
-
-        let idx = peaks
-            .binary_search_by(|p| p.value.total_cmp(&peak.value).reverse())
-            .unwrap_or_else(|e| e);
-        peaks.insert(idx, peak);
-
-        let mut total_length = self.total_length + peak.section_length;
-
-        while total_length > self.max_stored_length * self.max_section_length {
-            total_length -= peaks.last().unwrap().section_length;
-            peaks.pop();
-        }
+        let peaks: Vec<SortablePeak> = {
+            let mut buffer = Vec::new();
+            self.finalised_strain_peaks_into(&mut buffer);
+            buffer
+        };
 
         peaks
+            .into_iter()
+            .map(|peak| StrainPeak::new(peak.value, peak.section_length))
+            .collect()
     }
 
     #[allow(dead_code)]
@@ -331,52 +372,130 @@ impl Aim {
     }
 
     pub fn difficulty_value(&self) -> f64 {
-        let mut num = 0.0;
-        let mut num2 = 0.0;
+        // `eval` runs once per hit object while calculating gradual difficulty,
+        // so the whole reduction works inside one reusable buffer and never
+        // hands a `Vec` back to the caller.
+        scratch::with_strain_peaks(|list| {
+            self.finalised_strain_peaks_into(list);
+            list.retain(|p| p.value > 0.0);
 
-        for reduced_strain_peak in self.get_reduced_strain_peaks() {
-            let exponent = num2;
-            let num3 = num2 + reduced_strain_peak.section_length / self.max_section_length;
-            let num4 = self.decay_weight.powf(exponent) - self.decay_weight.powf(num3);
-            num += reduced_strain_peak.value * num4;
-            num2 = num3;
-        }
+            let reduced_section_time = 4000.0;
+            let mut num = 0.0;
+            let mut num2 = 0;
 
-        num / (1.0 - self.decay_weight)
+            while num2 < list.len() {
+                if num >= reduced_section_time {
+                    break;
+                }
+
+                let strain_peak = list[num2];
+                let mut num3 = 0.0;
+                while num3 < strain_peak.section_length {
+                    let clamped = ((num + num3) / reduced_section_time).clamp(0.0, 1.0);
+                    let num4 = (1.0 + (10.0 - 1.0) * clamped).log10();
+                    // Goes through `StrainPeak::new` so the section length is
+                    // rounded exactly the way every other peak is.
+                    let reduced = StrainPeak::new(
+                        strain_peak.value * (0.727 + (1.0 - 0.727) * num4),
+                        20.0_f64.min(strain_peak.section_length - num3),
+                    );
+                    list.push(SortablePeak::from(reduced));
+                    num3 += 20.0;
+                }
+
+                num += strain_peak.section_length;
+                num2 += 1;
+            }
+
+            // Same elements in the same order as `list.into_iter().skip(num2)`,
+            // but without allocating a second vector.
+            list.drain(..num2);
+
+            for (i, peak) in list.iter_mut().enumerate() {
+                peak.order = i as u32;
+            }
+
+            // * Ordering, not just sorting, has to match `sort_by` here. A stable
+            // * sort on `value` alone yields descending `value` with equal
+            // * values left in their original relative order, so a plain
+            // * `sort_unstable_by(|a, b| b.value.total_cmp(&a.value))` would be a
+            // * different permutation - and `StrainPeak` carries
+            // * `section_length`, which feeds the running exponent below, so
+            // * that difference is observable.
+            // *
+            // * Stamping the pre-sort position onto each peak turns the
+            // * comparator into a *strict total order*: descending by `value`,
+            // * ties broken by ascending original position. That describes
+            // * exactly the arrangement a stable sort produces, and a correct
+            // * sort under a strict total order has only one possible answer, so
+            // * the unstable sort yields the identical sequence.
+            // *
+            // * The other reason to do this: `sort_by` is a merge sort, and it
+            // * allocates a temporary buffer proportional to the slice length on
+            // * every call. `difficulty_value` runs once per hit object while
+            // * calculating gradual difficulty, and that buffer alone was 82% of
+            // * all allocations in a playthrough.
+            list.sort_unstable_by(|a, b| {
+                b.value
+                    .total_cmp(&a.value)
+                    .then_with(|| a.order.cmp(&b.order))
+            });
+
+            let mut sum = 0.0;
+            let mut exponent = 0.0;
+
+            // `decay_weight.powf(exponent)` of one iteration is the very same
+            // value as `decay_weight.powf(next)` of the previous one, so the
+            // previous result is carried over instead of being computed twice.
+            // The initial value is `powf`ed as well rather than assumed to be
+            // `1.0` so that the result stays bit-identical regardless of the
+            // platform's `pow`.
+            let mut prev_decay = self.decay_weight.powf(exponent);
+
+            for reduced_strain_peak in list.iter() {
+                let next = exponent + reduced_strain_peak.section_length / self.max_section_length;
+                let decay = self.decay_weight.powf(next);
+
+                sum += reduced_strain_peak.value * (prev_decay - decay);
+                exponent = next;
+                prev_decay = decay;
+            }
+
+            sum / (1.0 - self.decay_weight)
+        })
     }
 
-    fn get_reduced_strain_peaks(&self) -> Vec<StrainPeak> {
-        let peaks = self.finalised_strain_peaks();
-        let mut list: Vec<StrainPeak> = peaks.iter().copied().filter(|p| p.value > 0.0).collect();
+    /// Writes the strain peaks in their finalised form into `out`, mirroring
+    /// [`Self::get_current_strain_peaks`] and [`Self::save_current_peak`] but
+    /// without mutating `self` and without allocating.
+    ///
+    /// [`Self::difficulty_value`] deliberately does not use the in-place
+    /// variant: `eval` may run more than once over the same skill (gradual
+    /// difficulty), so finalising in place would mutate shared state.
+    fn finalised_strain_peaks_into(&self, out: &mut Vec<SortablePeak>) {
+        out.clear();
+        out.extend(self.strain_peaks.iter().copied().map(SortablePeak::from));
 
-        let reduced_section_time = 4000.0;
-        let mut num = 0.0;
-        let mut num2 = 0;
-
-        while num2 < list.len() {
-            if num >= reduced_section_time {
-                break;
-            }
-
-            let strain_peak = list[num2];
-            let mut num3 = 0.0;
-            while num3 < strain_peak.section_length {
-                let clamped = ((num + num3) / reduced_section_time).clamp(0.0, 1.0);
-                let num4 = (1.0 + (10.0 - 1.0) * clamped).log10();
-                list.push(StrainPeak::new(
-                    strain_peak.value * (0.727 + (1.0 - 0.727) * num4),
-                    20.0_f64.min(strain_peak.section_length - num3),
-                ));
-                num3 += 20.0;
-            }
-
-            num += strain_peak.section_length;
-            num2 += 1;
+        if self.peaks_finalised {
+            return;
         }
 
-        let mut remaining: Vec<StrainPeak> = list.into_iter().skip(num2).collect();
-        remaining.sort_by(|a, b| b.value.total_cmp(&a.value));
-        remaining
+        let peak = SortablePeak::from(StrainPeak::new(
+            self.current_section_peak,
+            self.current_section_end - self.current_section_begin,
+        ));
+
+        let idx = out
+            .binary_search_by(|p| p.value.total_cmp(&peak.value).reverse())
+            .unwrap_or_else(|e| e);
+        out.insert(idx, peak);
+
+        let mut total_length = self.total_length + peak.section_length;
+
+        while total_length > self.max_stored_length * self.max_section_length {
+            total_length -= out.last().unwrap().section_length;
+            out.pop();
+        }
     }
 
     pub fn count_top_weighted_strains(&self, difficulty_value: f64) -> f64 {

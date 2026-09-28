@@ -1,7 +1,4 @@
-use rosu_pp::{
-    Beatmap,
-    osu::OsuPerformance,
-};
+use rosu_pp::{Beatmap, osu::OsuPerformance};
 
 #[test]
 fn test_3700073() {
@@ -48,8 +45,16 @@ fn test_3700073() {
     println!("Reading diff: {:.4}", perf_lazer.difficulty.reading);
     println!("Speed deviation: {:?}", perf_lazer.speed_deviation);
 
-    assert!((perf_stable.pp - 1016.34).abs() < 0.1, "Stable PP mismatch: {}", perf_stable.pp);
-    assert!((perf_lazer.pp - 1022.52).abs() < 0.1, "Lazer PP mismatch: {}", perf_lazer.pp);
+    assert!(
+        (perf_stable.pp - 1016.34).abs() < 0.1,
+        "Stable PP mismatch: {}",
+        perf_stable.pp
+    );
+    assert!(
+        (perf_lazer.pp - 1022.52).abs() < 0.1,
+        "Lazer PP mismatch: {}",
+        perf_lazer.pp
+    );
 }
 
 #[test]
@@ -79,13 +84,39 @@ fn test_4904540() {
     println!("Reading difficulty: {:.4}", perf.difficulty.reading);
     println!("Effective miss count: {:.4}", perf.effective_miss_count);
     println!("Speed deviation: {:?}", perf.speed_deviation);
-    println!("Aim estimated slider breaks: {:.4}", perf.aim_estimated_slider_breaks);
-    println!("Speed estimated slider breaks: {:.4}", perf.speed_estimated_slider_breaks);
+    println!(
+        "Aim estimated slider breaks: {:.4}",
+        perf.aim_estimated_slider_breaks
+    );
+    println!(
+        "Speed estimated slider breaks: {:.4}",
+        perf.speed_estimated_slider_breaks
+    );
 
     assert!((perf.pp - 1261.85).abs() < 0.1, "PP mismatch: {}", perf.pp);
-    assert!((perf.pp_aim - 751.47).abs() < 0.1, "Aim PP mismatch: {}", perf.pp_aim);
-    assert!((perf.pp_speed - 266.10).abs() < 0.1, "Speed PP mismatch: {}", perf.pp_speed);
-    assert!((perf.pp_acc - 184.63).abs() < 0.1, "Acc PP mismatch: {}", perf.pp_acc);
-    assert!((perf.pp_reading - 29.62).abs() < 0.1, "Reading PP mismatch: {}", perf.pp_reading);
-    assert!((perf.difficulty.stars - 9.68).abs() < 0.05, "Star rating mismatch: {}", perf.difficulty.stars);
+    assert!(
+        (perf.pp_aim - 751.47).abs() < 0.1,
+        "Aim PP mismatch: {}",
+        perf.pp_aim
+    );
+    assert!(
+        (perf.pp_speed - 266.10).abs() < 0.1,
+        "Speed PP mismatch: {}",
+        perf.pp_speed
+    );
+    assert!(
+        (perf.pp_acc - 184.63).abs() < 0.1,
+        "Acc PP mismatch: {}",
+        perf.pp_acc
+    );
+    assert!(
+        (perf.pp_reading - 29.62).abs() < 0.1,
+        "Reading PP mismatch: {}",
+        perf.pp_reading
+    );
+    assert!(
+        (perf.difficulty.stars - 9.68).abs() < 0.05,
+        "Star rating mismatch: {}",
+        perf.difficulty.stars
+    );
 }

@@ -592,8 +592,6 @@ fn convert_mania() {
     };
 }
 
-
-
 impl AssertEq for OsuDifficultyAttributes {
     fn assert_eq(&self, expected: &Self) {
         let Self {

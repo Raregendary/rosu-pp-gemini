@@ -1,8 +1,12 @@
 use crate::{
     model::mods::GameMods,
-    osu::difficulty::{evaluators::ReadingEvaluator, object::OsuDifficultyObject},
+    osu::difficulty::{
+        context::OsuDifficultyContext, evaluators::ReadingEvaluator, object::OsuDifficultyObject,
+    },
     util::{difficulty::logistic, float_ext::FloatExt},
 };
+
+use super::{scratch, weights};
 
 #[derive(Clone, Debug)]
 pub struct Reading {
@@ -13,13 +17,29 @@ pub struct Reading {
     is_touch_device: bool,
     is_relax: bool,
     is_autopilot: bool,
+    ctx: OsuDifficultyContext,
 }
 
 impl Reading {
+    /// Runs [`Self::process`] over the first `take` objects.
+    ///
+    /// Exists so that [`OsuSkills::process_all`](super::OsuSkills::process_all)
+    /// can hand whole skills to a thread pool: each skill is sequential in the
+    /// objects, so spreading *skills* is the only parallelism available.
+    ///
+    /// `objects` stays the full list rather than being truncated to `take`,
+    /// because evaluators look at neighbouring objects and a shortened slice
+    /// would change the last processed object's difficulty.
+    pub fn process_all(&mut self, objects: &[OsuDifficultyObject<'_>], take: usize) {
+        for curr in objects.iter().take(take) {
+            self.process(curr, objects);
+        }
+    }
+
     const HARMONIC_SCALE: f64 = 1.0;
     const DECAY_EXPONENT: f64 = 0.9;
 
-    pub fn new(mods: &GameMods) -> Self {
+    pub fn new(mods: &GameMods, ctx: OsuDifficultyContext) -> Self {
         Self {
             has_hidden_mod: mods.hd(),
             current_strain: 0.0,
@@ -28,11 +48,12 @@ impl Reading {
             is_touch_device: mods.td(),
             is_relax: mods.rx(),
             is_autopilot: mods.ap(),
+            ctx,
         }
     }
 
-    pub fn with_capacity(mods: &GameMods, total_objects: usize) -> Self {
-        let mut this = Self::new(mods);
+    pub fn with_capacity(mods: &GameMods, total_objects: usize, ctx: OsuDifficultyContext) -> Self {
+        let mut this = Self::new(mods, ctx);
 
         // Both grow by at most one entry per processed object; reserving up front
         // avoids repeated reallocation on every calculation.
@@ -74,7 +95,8 @@ impl Reading {
         curr: &OsuDifficultyObject<'_>,
         diff_objects: &[OsuDifficultyObject<'_>],
     ) -> f64 {
-        let mut num = ReadingEvaluator::evaluate_diff_of(curr, diff_objects, self.has_hidden_mod);
+        let mut num =
+            ReadingEvaluator::evaluate_diff_of(curr, diff_objects, self.has_hidden_mod, &self.ctx);
 
         if self.is_touch_device {
             num = num.powf(0.89);
@@ -88,7 +110,7 @@ impl Reading {
             num *= 0.1;
         }
 
-        num * (0.825 + curr.overall_difficulty().max(0.0).powf(2.2) / 1125.0)
+        num * self.ctx.reading_od_factor
     }
 
     #[allow(dead_code)]
@@ -107,43 +129,45 @@ impl Reading {
             return (0.0, 0.0);
         }
 
-        let mut diffs: Vec<f64> = self
-            .object_difficulties
-            .iter()
-            .copied()
-            .filter(|&v| v > 0.0)
-            .collect();
+        // The reduction runs once per hit object while calculating gradual
+        // difficulty, so the working list comes out of a reusable buffer rather
+        // than a fresh allocation each time.
+        scratch::with_object_difficulties(|diffs| {
+            diffs.clear();
+            diffs.extend(
+                self.object_difficulties
+                    .iter()
+                    .copied()
+                    .filter(|&v| v > 0.0),
+            );
 
-        if diffs.is_empty() {
-            return (0.0, 0.0);
-        }
+            if diffs.is_empty() {
+                return (0.0, 0.0);
+            }
 
-        let num_reduced = self.calculate_reduced_note_count();
-        let limit = diffs.len().min(num_reduced);
+            let num_reduced = self.calculate_reduced_note_count();
+            let limit = diffs.len().min(num_reduced);
 
-        for num2 in 0..limit {
-            let clamped = (num2 as f64 / num_reduced as f64).clamp(0.0, 1.0);
-            let num3 = (1.0 + (10.0 - 1.0) * clamped).log10();
-            diffs[num2] *= num3;
-        }
+            for num2 in 0..limit {
+                let clamped = (num2 as f64 / num_reduced as f64).clamp(0.0, 1.0);
+                let num3 = (1.0 + (10.0 - 1.0) * clamped).log10();
+                diffs[num2] *= num3;
+            }
 
-        diffs.sort_by(|a, b| b.total_cmp(a));
+            // * An unstable sort is exact here (unlike in `Aim`, see the note in
+            // * `Aim::difficulty_value`): the elements are plain `f64`s that are
+            // * interchangeable when equal, and the weight applied to a position
+            // * depends only on that position, so two equal values swapped still
+            // * produce the identical sequence of products.
+            diffs.sort_unstable_by(|a, b| b.total_cmp(a));
 
-        let mut num = 0.0;
-        let mut num2 = 0;
-        let mut object_weight_sum = 0.0;
-
-        for item in diffs {
-            let scale_term = Self::HARMONIC_SCALE / (1 + num2) as f64;
-            let num3 = (1.0 + scale_term)
-                / ((num2 as f64).powf(Self::DECAY_EXPONENT) + 1.0 + scale_term);
-
-            object_weight_sum += num3;
-            num += item * num3;
-            num2 += 1;
-        }
-
-        (num, object_weight_sum)
+            weights::weighted_sum(
+                weights::reading_weights(),
+                Self::HARMONIC_SCALE,
+                Self::DECAY_EXPONENT,
+                diffs,
+            )
+        })
     }
 
     fn calculate_reduced_note_count(&self) -> usize {
@@ -152,7 +176,10 @@ impl Reading {
         };
 
         let cutoff = first_start_time + 60000.0;
-        self.start_times.iter().take_while(|&&t| t <= cutoff).count()
+        self.start_times
+            .iter()
+            .take_while(|&&t| t <= cutoff)
+            .count()
     }
 
     pub fn count_top_weighted_object_difficulties(

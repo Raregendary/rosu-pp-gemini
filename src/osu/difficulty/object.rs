@@ -8,7 +8,7 @@ use crate::{
     util::difficulty::reverse_lerp,
 };
 
-use super::scaling_factor::ScalingFactor;
+use super::{context::OsuDifficultyContext, scaling_factor::ScalingFactor};
 
 pub struct OsuDifficultyObject<'a> {
     pub idx: usize,
@@ -30,11 +30,18 @@ pub struct OsuDifficultyObject<'a> {
     pub angle: Option<f64>,
     pub normalised_vector_angle: Option<f64>,
 
-    pub small_circle_bonus: f64,
     pub hit_window_great: f64,
     pub preempt: f64,
-    pub clock_rate: f64,
     pub radius: f64,
+
+    /// `adjusted_delta_time.powf(1.45)`, used twice by
+    /// [`SnapAimEvaluator`](super::evaluators::SnapAimEvaluator) for the current
+    /// and once for the previous object, so recomputing it per object halves
+    /// the number of `powf` calls.
+    pub adjusted_delta_time_pow_145: f64,
+    /// The exponent of [`Self::calculate_double_tap_feasibility`], which depends
+    /// only on `self` and is therefore computed once up front.
+    pub double_tap_power: f64,
 }
 
 impl<'a> OsuDifficultyObject<'a> {
@@ -59,11 +66,9 @@ impl<'a> OsuDifficultyObject<'a> {
         let start_time = hit_object.start_time / clock_rate;
 
         let strain_time = delta_time.max(Self::MIN_DELTA_TIME);
-        let small_circle_bonus = (1.0 + (30.0 - scaling_factor.radius) / 70.0).max(1.0);
         let last_object_end_delta_time = last_diff_obj.map_or(strain_time, |prev| {
             ((hit_object.start_time - prev.base.end_time()) / clock_rate).max(Self::MIN_DELTA_TIME)
         });
-
         let mut this = Self {
             idx,
             base: hit_object,
@@ -82,11 +87,11 @@ impl<'a> OsuDifficultyObject<'a> {
             lazy_travel_time: 0.0,
             angle: None,
             normalised_vector_angle: None,
-            small_circle_bonus,
             hit_window_great,
             preempt,
-            clock_rate,
             radius: scaling_factor.radius,
+            adjusted_delta_time_pow_145: 0.0,
+            double_tap_power: 0.0,
         };
 
         this.compute_slider_cursor_pos(scaling_factor.radius);
@@ -98,31 +103,36 @@ impl<'a> OsuDifficultyObject<'a> {
             scaling_factor,
         );
 
+        // Both of these depend on fields that `set_distances` only just filled in.
+        this.adjusted_delta_time_pow_145 = this.adjusted_delta_time.powf(1.45);
+        this.double_tap_power = {
+            // `delta_time.max(1.0)`, not `adjusted_delta_time`: the two differ
+            // whenever the raw delta time is below the minimum strain time.
+            let num = this.delta_time.max(1.0);
+            let num2 = (num / hit_window_great).min(1.0).powf(5.0);
+            let num3 = reverse_lerp(this.lazy_jump_dist, 100.0, 50.0).powf(2.0);
+
+            num3 * (1.0 - num2)
+        };
+
         this
     }
 
-    pub fn overall_difficulty(&self) -> f64 {
-        (79.5 - self.hit_window_great / 2.0) / 6.0
-    }
-
-    pub fn opacity_at(&self, time: f64, hidden: bool) -> f64 {
+    #[inline]
+    pub fn opacity_at(&self, time: f64, hidden: bool, ctx: &OsuDifficultyContext) -> f64 {
         if time > self.base.start_time {
             return 0.0;
         }
 
-        let raw_preempt = self.preempt * self.clock_rate;
-        let num = self.base.start_time - raw_preempt;
-        let num2 = 400.0 * (raw_preempt / 450.0).min(1.0);
+        let num = self.base.start_time - ctx.opacity_raw_preempt;
 
         if hidden {
-            let time_fade_in = raw_preempt * 0.4;
-            let num3 = self.base.start_time - raw_preempt + time_fade_in;
-            let num4 = raw_preempt * 0.3;
-            let fade_in = ((time - num) / num2).clamp(0.0, 1.0);
-            let fade_out = ((time - num3) / num4).clamp(0.0, 1.0);
+            let num3 = num + ctx.opacity_fade_in;
+            let fade_in = ((time - num) / ctx.opacity_divisor).clamp(0.0, 1.0);
+            let fade_out = ((time - num3) / ctx.opacity_fade_out).clamp(0.0, 1.0);
             fade_in.min(1.0 - fade_out)
         } else {
-            ((time - num) / num2).clamp(0.0, 1.0)
+            ((time - num) / ctx.opacity_divisor).clamp(0.0, 1.0)
         }
     }
 
@@ -132,10 +142,8 @@ impl<'a> OsuDifficultyObject<'a> {
         let num = self.delta_time.max(1.0);
         let val = (next.delta_time.max(1.0) - num).abs();
         let x = num / num.max(val);
-        let num2 = (num / self.hit_window_great).min(1.0).powf(5.0);
-        let num3 = reverse_lerp(self.lazy_jump_dist, 100.0, 50.0).powf(2.0);
 
-        1.0 - x.powf(num3 * (1.0 - num2))
+        1.0 - x.powf(self.double_tap_power)
     }
 
     fn calculate_angle(curr_pos: Pos, last_pos: Pos, last_last_pos: Pos) -> f64 {
@@ -158,9 +166,9 @@ impl<'a> OsuDifficultyObject<'a> {
         if let OsuObjectKind::Slider(ref slider) = last_object.kind {
             if last_diff_obj.travel_dist > 0.0 {
                 if slider.nested_objects.len() >= 2 {
-                    last_last_cursor_pos =
-                        slider.nested_objects[slider.nested_objects.len() - 2].pos
-                            + last_object.stack_offset;
+                    last_last_cursor_pos = slider.nested_objects[slider.nested_objects.len() - 2]
+                        .pos
+                        + last_object.stack_offset;
                 } else {
                     last_last_cursor_pos = last_object.stacked_pos();
                 }
@@ -179,8 +187,8 @@ impl<'a> OsuDifficultyObject<'a> {
         scaling_factor: &ScalingFactor,
     ) {
         if let OsuObjectKind::Slider(ref slider) = self.base.kind {
-            self.travel_dist = self.lazy_travel_dist
-                * (1.0_f64).max((slider.repeat_count() as f64).powf(0.3));
+            self.travel_dist =
+                self.lazy_travel_dist * (1.0_f64).max((slider.repeat_count() as f64).powf(0.3));
 
             self.travel_time =
                 (self.lazy_travel_time / clock_rate).max(OsuDifficultyObject::MIN_DELTA_TIME);
@@ -199,11 +207,14 @@ impl<'a> OsuDifficultyObject<'a> {
         };
 
         self.jump_dist = f64::from(
-            (last_object.stacked_pos() * scaling_factor_val - self.base.stacked_pos() * scaling_factor_val).length(),
+            (last_object.stacked_pos() * scaling_factor_val
+                - self.base.stacked_pos() * scaling_factor_val)
+                .length(),
         );
 
         self.lazy_jump_dist = f64::from(
-            (self.base.stacked_pos() * scaling_factor_val - last_cursor_pos * scaling_factor_val).length(),
+            (self.base.stacked_pos() * scaling_factor_val - last_cursor_pos * scaling_factor_val)
+                .length(),
         );
         self.min_jump_time = self.adjusted_delta_time;
         self.min_jump_dist = self.lazy_jump_dist;

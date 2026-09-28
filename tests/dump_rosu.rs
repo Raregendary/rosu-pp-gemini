@@ -1,6 +1,6 @@
+use rosu_pp::{Beatmap, Difficulty, Performance};
 use std::fs::File;
 use std::io::Write;
-use rosu_pp::{Beatmap, Difficulty, Performance};
 
 #[test]
 fn test_dump_rosu_values() {
@@ -41,7 +41,11 @@ fn test_dump_rosu_values() {
                 .calculate();
             let pp = perf.pp();
 
-            let comma = if mod_idx + 1 == mods_list.len() { "" } else { "," };
+            let comma = if mod_idx + 1 == mods_list.len() {
+                ""
+            } else {
+                ","
+            };
             out.push_str(&format!(
                 "    \"{}\": {{ \"stars\": {:.6}, \"pp\": {:.6} }}{}\n",
                 mod_name, stars, pp, comma

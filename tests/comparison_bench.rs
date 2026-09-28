@@ -1,5 +1,5 @@
-use std::time::{Duration, Instant};
 use rosu_pp::{Beatmap, Difficulty, Performance};
+use std::time::{Duration, Instant};
 
 struct Stats {
     median: Duration,

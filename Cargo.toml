@@ -18,9 +18,13 @@ path = "src/lib.rs"
 default = []
 sync = []
 tracing = ["rosu-map/tracing"]
+# Runs the five osu!standard skills in parallel over the rayon thread pool.
+# Results are bit-identical either way; see `OsuSkills::process`.
+rayon = ["dep:rayon"]
 
 [dependencies]
 divan = "0.1.21"
+rayon = { version = "1.11", optional = true }
 rosu-map = { version = "0.2.1" }
 rosu-mods = { version = "0.4.0" }
 

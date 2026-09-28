@@ -1,8 +1,4 @@
-use rosu_pp::{
-    Beatmap,
-    Difficulty,
-    Performance,
-};
+use rosu_pp::{Beatmap, Difficulty, Performance};
 
 #[test]
 fn test_all_four_benchmark_maps() {

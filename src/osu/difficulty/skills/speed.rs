@@ -8,6 +8,8 @@ use crate::{
     util::{difficulty::logistic, float_ext::FloatExt},
 };
 
+use super::{scratch, weights};
+
 #[derive(Clone, Debug)]
 pub struct Speed {
     current_strain: f64,
@@ -21,6 +23,21 @@ pub struct Speed {
 }
 
 impl Speed {
+    /// Runs [`Self::process`] over the first `take` objects.
+    ///
+    /// Exists so that [`OsuSkills::process_all`](super::OsuSkills::process_all)
+    /// can hand whole skills to a thread pool: each skill is sequential in the
+    /// objects, so spreading *skills* is the only parallelism available.
+    ///
+    /// `objects` stays the full list rather than being truncated to `take`,
+    /// because evaluators look at neighbouring objects and a shortened slice
+    /// would change the last processed object's difficulty.
+    pub fn process_all(&mut self, objects: &[OsuDifficultyObject<'_>], take: usize) {
+        for curr in objects.iter().take(take) {
+            self.process(curr, objects);
+        }
+    }
+
     const HARMONIC_SCALE: f64 = 20.0;
     const DECAY_EXPONENT: f64 = 0.9;
 
@@ -95,7 +112,8 @@ impl Speed {
 
         let num = Self::strain_decay(curr.adjusted_delta_time);
         self.current_strain *= num;
-        self.current_strain += self.calculate_adjusted_difficulty(curr, diff_objects) * (1.0 - num) * 1.16;
+        self.current_strain +=
+            self.calculate_adjusted_difficulty(curr, diff_objects) * (1.0 - num) * 1.16;
 
         let num2 = RhythmEvaluator::evaluate_diff_of(curr, diff_objects);
         let num3 = self.current_strain * num2;
@@ -158,34 +176,36 @@ impl Speed {
             return (0.0, 0.0);
         }
 
-        let mut diffs: Vec<f64> = self
-            .object_difficulties
-            .iter()
-            .copied()
-            .filter(|&v| v > 0.0)
-            .collect();
+        // The reduction runs once per hit object while calculating gradual
+        // difficulty, so the working list comes out of a reusable buffer rather
+        // than a fresh allocation each time.
+        scratch::with_object_difficulties(|diffs| {
+            diffs.clear();
+            diffs.extend(
+                self.object_difficulties
+                    .iter()
+                    .copied()
+                    .filter(|&v| v > 0.0),
+            );
 
-        if diffs.is_empty() {
-            return (0.0, 0.0);
-        }
+            if diffs.is_empty() {
+                return (0.0, 0.0);
+            }
 
-        diffs.sort_by(|a, b| b.total_cmp(a));
+            // * An unstable sort is exact here (unlike in `Aim`, see the note in
+            // * `Aim::difficulty_value`): the elements are plain `f64`s that are
+            // * interchangeable when equal, and the weight applied to a position
+            // * depends only on that position, so two equal values swapped still
+            // * produce the identical sequence of products.
+            diffs.sort_unstable_by(|a, b| b.total_cmp(a));
 
-        let mut num = 0.0;
-        let mut num2 = 0;
-        let mut object_weight_sum = 0.0;
-
-        for item in diffs {
-            let scale_term = Self::HARMONIC_SCALE / (1 + num2) as f64;
-            let num3 = (1.0 + scale_term)
-                / ((num2 as f64).powf(Self::DECAY_EXPONENT) + 1.0 + scale_term);
-
-            object_weight_sum += num3;
-            num += item * num3;
-            num2 += 1;
-        }
-
-        (num, object_weight_sum)
+            weights::weighted_sum(
+                weights::speed_weights(),
+                Self::HARMONIC_SCALE,
+                Self::DECAY_EXPONENT,
+                diffs,
+            )
+        })
     }
 
     pub fn count_top_weighted_object_difficulties(

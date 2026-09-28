@@ -1,6 +1,5 @@
 use crate::{
-    any::difficulty::object::IDifficultyObject,
-    osu::difficulty::object::OsuDifficultyObject,
+    osu::difficulty::{context::OsuDifficultyContext, object::OsuDifficultyObject},
     util::difficulty::{milliseconds_to_bpm, reverse_lerp, smootherstep, smoothstep},
 };
 
@@ -11,20 +10,22 @@ impl SnapAimEvaluator {
         curr: &'a OsuDifficultyObject<'a>,
         diff_objects: &'a [OsuDifficultyObject<'a>],
         with_slider_travel_distance: bool,
+        ctx: &OsuDifficultyContext,
     ) -> f64 {
         if curr.base.is_spinner() || curr.idx <= 1 {
             return 0.0;
         }
 
-        let Some(prev_diff_obj) = curr.previous(0, diff_objects) else {
-            return 0.0;
-        };
+        // `previous(0)` == `&diff_objects[idx - 1]` and `previous(2)` ==
+        // `&diff_objects[idx - 3]`, both already guaranteed to be in bounds by
+        // the `curr.idx <= 1` bail-out above.
+        let prev_diff_obj = &diff_objects[curr.idx - 1];
 
         if prev_diff_obj.base.is_spinner() {
             return 0.0;
         }
 
-        let prev_prev_diff_obj = curr.previous(2, diff_objects);
+        let prev_prev_diff_obj = diff_objects.get(curr.idx - 3);
 
         let num = if with_slider_travel_distance {
             curr.lazy_jump_dist
@@ -54,32 +55,36 @@ impl SnapAimEvaluator {
             let num7 = num2.min(num5);
             let mut num8 = 0.0;
 
-            if curr.adjusted_delta_time.max(prev_diff_obj.adjusted_delta_time)
-                < 1.25 * curr.adjusted_delta_time.min(prev_diff_obj.adjusted_delta_time)
+            if curr
+                .adjusted_delta_time
+                .max(prev_diff_obj.adjusted_delta_time)
+                < 1.25
+                    * curr
+                        .adjusted_delta_time
+                        .min(prev_diff_obj.adjusted_delta_time)
             {
                 num8 = Self::calc_angle_acuteness(value);
-                num8 *= 0.08
-                    + 0.92
-                        * (1.0 - num8.min(Self::calc_angle_acuteness(value2).powf(3.0)));
-                num8 *= num7
-                    * smootherstep(
+                num8 *=
+                    0.08 + 0.92 * (1.0 - num8.min(Self::calc_angle_acuteness(value2).powf(3.0)));
+                num8 *=
+                    num7 * smootherstep(
                         milliseconds_to_bpm(curr.adjusted_delta_time, Some(2)),
                         300.0,
                         400.0,
-                    )
-                    * smootherstep(num, 0.0, 200.0);
+                    ) * smootherstep(num, 0.0, 200.0);
             }
 
             let mut num9 = Self::calc_angle_wideness(value);
-            num9 *= 0.25
-                + 0.75 * (1.0 - num9.min(Self::calc_angle_wideness(value2).powf(3.0)));
+            num9 *= 0.25 + 0.75 * (1.0 - num9.min(Self::calc_angle_wideness(value2).powf(3.0)));
 
-            // The same `powf` is needed again in the slider branch below, so it
-            // is computed once here.
-            let curr_dt_pow = curr.adjusted_delta_time.powf(1.45);
+            // `adjusted_delta_time.powf(1.45)` is needed for the current object
+            // here and for the previous object below. The previous object is the
+            // current object of the next call, so both sides read the value that
+            // was computed once, on the difficulty object itself.
+            let curr_dt_pow = curr.adjusted_delta_time_pow_145;
 
             let mut val = num / curr_dt_pow;
-            let val2 = num4 / prev_diff_obj.adjusted_delta_time.powf(1.45);
+            let val2 = num4 / prev_diff_obj.adjusted_delta_time_pow_145;
 
             if prev_diff_obj.base.is_slider() && with_slider_travel_distance {
                 let num10 = prev_diff_obj.lazy_travel_dist + curr.lazy_jump_dist;
@@ -141,7 +146,7 @@ impl SnapAimEvaluator {
             num6 += if num14 < 1.0 { num14 } else { num14.powf(0.75) } * 1.5;
         }
 
-        num6 *= curr.small_circle_bonus;
+        num6 *= ctx.small_circle_bonus;
         num6 * Self::high_bpm_bonus(curr.adjusted_delta_time)
     }
 
@@ -161,11 +166,7 @@ impl SnapAimEvaluator {
         let mut num = 0.0;
         let rad_11_25 = 11.25_f64.to_radians();
 
-        for i in 0..6 {
-            let Some(prev_i) = curr.previous(i, diff_objects) else {
-                break;
-            };
-
+        for prev_i in diff_objects[..curr.idx].iter().rev().take(6) {
             if curr.adjusted_delta_time.max(prev_i.adjusted_delta_time)
                 > 1.1 * curr.adjusted_delta_time.min(prev_i.adjusted_delta_time)
             {
@@ -182,7 +183,8 @@ impl SnapAimEvaluator {
 
         let num2 = ((0.5 / num).min(1.0)).powf(2.0);
         let num3 = smootherstep(curr.lazy_jump_dist, 0.0, 100.0);
-        let num4 = (2.0 * (45.0_f64.to_radians()).min((curr_angle - prev_angle).abs() * num3)).cos();
+        let num4 =
+            (2.0 * (45.0_f64.to_radians()).min((curr_angle - prev_angle).abs() * num3)).cos();
         let num5 = 1.0 - 0.15 * Self::calc_angle_acuteness(prev_angle) * num4;
 
         (num5 + (1.0 - num5) * num2 * 0.5 * num3).powf(2.0)

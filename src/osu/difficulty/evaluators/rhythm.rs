@@ -1,7 +1,6 @@
 use std::cmp;
 
 use crate::{
-    any::difficulty::object::IDifficultyObject,
     osu::difficulty::object::OsuDifficultyObject,
     util::difficulty::{logistic, reverse_lerp, smoothstep_bell_curve_single},
 };
@@ -63,17 +62,33 @@ impl RhythmEvaluator {
             }
         }
 
-        let (Some(mut osu_diff_obj), Some(mut osu_diff_obj2)) =
-            (curr.previous(i, diff_objects), curr.previous(i + 1, diff_objects))
+        // The walk below needs the two objects just before the history window,
+        // i.e. `previous(i)` == `&diff_objects[curr.idx - i - 1]` and
+        // `previous(i + 1)` == `&diff_objects[curr.idx - i - 2]`. The loop only
+        // runs for `i <= num4 - 2 <= curr.idx - 2`, so these are in bounds
+        // exactly when `curr.idx >= i + 2`.
+        if curr.idx < i + 2 {
+            return 1.0;
+        }
+
+        // Walking a slice iterator rather than indexing keeps the bounds check
+        // out of the code entirely: `skip` and `next` on a slice iterator are
+        // just pointer arithmetic, and `zip` iterates the rest without ever
+        // forming an index. This matters because the loop below is the hottest
+        // in the whole calculation.
+        //
+        // `previous(num5 - 1)` == `&diff_objects[curr.idx - num5]`, and `num5`
+        // runs *down* from `i` to `1`, so the history is walked front to back.
+        // The direction is load bearing: `osu_diff_obj` and `osu_diff_obj2`
+        // trail the loop one and two steps behind it.
+        let mut history = diff_objects.iter().skip(curr.idx - i - 2);
+
+        let (Some(mut osu_diff_obj2), Some(mut osu_diff_obj)) = (history.next(), history.next())
         else {
             return 1.0;
         };
 
-        for num5 in (1..=i).rev() {
-            let Some(osu_diff_obj3) = curr.previous(num5 - 1, diff_objects) else {
-                break;
-            };
-
+        for (num5, osu_diff_obj3) in (1..=i).rev().zip(history) {
             if !osu_diff_obj3.base.is_spinner() {
                 let val = (Self::HISTORY_TIME_MAX - (curr.start_time - osu_diff_obj3.start_time))
                     / Self::HISTORY_TIME_MAX;
@@ -133,9 +148,18 @@ impl RhythmEvaluator {
                                     item.occurrences += 1;
                                 }
 
-                                let exponent = logistic(f64::from(island.delta), 58.33, 0.24, Some(2.75));
-                                num13 *= (3.0 / item.occurrences as f64)
-                                    .min((1.0 / item.occurrences as f64).powf(exponent));
+                                // `occurrences == 1` makes the whole factor
+                                // `(3.0 / 1.0).min((1.0 / 1.0).powf(e))` equal
+                                // to `3.0f64.min(1.0)` == `1.0`, so `num13 *= 1.0`
+                                // is an exact no-op and neither the `logistic`
+                                // nor the `powf` is observable.
+                                if item.occurrences > 1 {
+                                    let exponent =
+                                        logistic(f64::from(island.delta), 58.33, 0.24, Some(2.75));
+                                    num13 *= (3.0 / item.occurrences as f64)
+                                        .min((1.0 / item.occurrences as f64).powf(exponent));
+                                }
+
                                 flag2 = true;
                                 break;
                             }

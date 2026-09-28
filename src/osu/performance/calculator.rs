@@ -4,10 +4,7 @@ use crate::{
     GameMods,
     osu::{
         OsuDifficultyAttributes, OsuPerformanceAttributes, OsuScoreState,
-        difficulty::{
-            skills::flashlight::Flashlight,
-            sum_cognition_difficulty,
-        },
+        difficulty::{skills::flashlight::Flashlight, sum_cognition_difficulty},
         legacy_score_miss_calc::OsuLegacyScoreMissCalculator,
     },
     util::{
@@ -449,8 +446,8 @@ impl OsuPerformanceCalculator<'_> {
         }
 
         let missed_combo_percent = 1.0 - f64::from(state.max_combo) / f64::from(attrs.max_combo);
-        let mut estimated_slider_breaks = (effective_miss_count * top_weighted_slider_factor)
-            .min(imperfect);
+        let mut estimated_slider_breaks =
+            (effective_miss_count * top_weighted_slider_factor).min(imperfect);
 
         // * Scores with more Oks are more likely to have slider breaks.
         let num3 = (imperfect - estimated_slider_breaks + 4.5) / (imperfect + 4.0);
@@ -641,4 +638,3 @@ fn calculate_traceable_bonus(approach_rate: f64, slider_factor: f64) -> f64 {
     }
     num3
 }
-

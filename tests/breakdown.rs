@@ -1,5 +1,5 @@
-use std::time::Instant;
 use rosu_pp::{Beatmap, Difficulty, Performance};
+use std::time::Instant;
 
 #[test]
 fn test_breakdown() {

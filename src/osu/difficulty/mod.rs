@@ -4,15 +4,12 @@ use rosu_map::section::general::GameMode;
 
 use crate::{
     Beatmap,
-    any::{
-        CalculateError,
-        difficulty::Difficulty,
-    },
+    any::{CalculateError, difficulty::Difficulty},
     model::{beatmap::BeatmapAttributes, mode::ConvertError, mods::GameMods},
     osu::{
         convert::{convert_objects, prepare_map},
         difficulty::{
-            object::OsuDifficultyObject,
+            context::OsuDifficultyContext, object::OsuDifficultyObject,
             scaling_factor::ScalingFactor,
         },
         legacy_score_simulator::OsuLegacyScoreSimulator,
@@ -26,6 +23,7 @@ use self::skills::OsuSkills;
 
 use super::attributes::OsuDifficultyAttributes;
 
+mod context;
 mod evaluators;
 pub mod gradual;
 mod object;
@@ -159,14 +157,24 @@ impl DifficultyValues {
             preempt,
         );
 
-        let mut skills = OsuSkills::new(mods, &scaling_factor, map.hit_objects.len());
+        let ctx = OsuDifficultyContext::new(
+            great_hit_window,
+            preempt,
+            difficulty.get_clock_rate(),
+            scaling_factor.radius,
+        );
+
+        let mut skills = OsuSkills::new(mods, map.hit_objects.len(), ctx);
 
         // The first hit object has no difficulty object
         let take_diff_objects = cmp::min(map.hit_objects.len(), take).saturating_sub(1);
 
-        for hit_object in diff_objects.iter().take(take_diff_objects) {
-            skills.process(hit_object, &diff_objects);
-        }
+        // With the `rayon` feature the five skills are run on separate threads
+        // for the whole calculation at once. They are independent of each other
+        // and each is sequential in the objects, so this is the only parallelism
+        // available - and doing it here rather than per hit object is the
+        // difference between ~5 synchronisation points and thousands.
+        skills.process_all(&diff_objects, take_diff_objects);
 
         Self {
             osu_objects,
@@ -196,8 +204,8 @@ impl DifficultyValues {
         let difficult_sliders = aim.get_difficult_sliders();
 
         let aim_no_sliders_difficulty_value = aim_no_sliders.difficulty_value();
-        let aim_no_sliders_top_weighted_slider_count = aim_no_sliders
-            .count_top_weighted_sliders(aim_no_sliders_difficulty_value);
+        let aim_no_sliders_top_weighted_slider_count =
+            aim_no_sliders.count_top_weighted_sliders(aim_no_sliders_difficulty_value);
         let aim_no_sliders_difficult_strain_count =
             aim_no_sliders.count_top_weighted_strains(aim_no_sliders_difficulty_value);
 
@@ -339,6 +347,12 @@ pub fn sum_cognition_difficulty(reading: f64, flashlight: f64) -> f64 {
     } else if flashlight <= 0.0 {
         reading
     } else {
-        norm(1.1, [reading, flashlight * (flashlight / reading).clamp(0.25, 1.0)])
+        norm(
+            1.1,
+            [
+                reading,
+                flashlight * (flashlight / reading).clamp(0.25, 1.0),
+            ],
+        )
     }
 }

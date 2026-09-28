@@ -1,8 +1,6 @@
-use std::cmp;
-
-use crate::{
-    any::difficulty::object::IDifficultyObject,
-    osu::{difficulty::object::OsuDifficultyObject, object::OsuObjectKind},
+use crate::osu::{
+    difficulty::{context::OsuDifficultyContext, object::OsuDifficultyObject},
+    object::OsuObjectKind,
 };
 
 pub struct FlashlightEvaluator {
@@ -25,6 +23,7 @@ impl FlashlightEvaluator {
         curr: &'a OsuDifficultyObject<'a>,
         diff_objects: &'a [OsuDifficultyObject<'a>],
         hidden: bool,
+        ctx: &OsuDifficultyContext,
     ) -> f64 {
         if curr.base.is_spinner() {
             return 0.0;
@@ -39,11 +38,7 @@ impl FlashlightEvaluator {
         let mut last_obj = osu_curr;
         let mut angle_repeat_count = 0.0;
 
-        for i in 0..cmp::min(curr.idx, 10) {
-            let Some(curr_obj) = curr.previous(i, diff_objects) else {
-                break;
-            };
-
+        for (i, curr_obj) in diff_objects[..curr.idx].iter().rev().take(10).enumerate() {
             cumulative_strain_time += last_obj.adjusted_delta_time;
             let curr_hit_obj = curr_obj.base;
 
@@ -60,7 +55,7 @@ impl FlashlightEvaluator {
 
                 let opacity_bonus = 1.0
                     + Self::MAX_OPACITY_BONUS
-                        * (1.0 - osu_curr.opacity_at(curr_hit_obj.start_time, hidden));
+                        * (1.0 - osu_curr.opacity_at(curr_hit_obj.start_time, hidden, ctx));
 
                 result += stack_nerf * opacity_bonus * self.scaling_factor * jump_dist
                     / cumulative_strain_time;

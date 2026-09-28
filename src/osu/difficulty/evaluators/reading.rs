@@ -2,7 +2,7 @@ use std::f64::consts::PI;
 
 use crate::{
     any::difficulty::object::IDifficultyObject,
-    osu::difficulty::object::OsuDifficultyObject,
+    osu::difficulty::{context::OsuDifficultyContext, object::OsuDifficultyObject},
     util::difficulty::{norm, reverse_lerp, smootherstep},
 };
 
@@ -13,19 +13,19 @@ impl ReadingEvaluator {
         curr: &'a OsuDifficultyObject<'a>,
         diff_objects: &'a [OsuDifficultyObject<'a>],
         hidden: bool,
+        ctx: &OsuDifficultyContext,
     ) -> f64 {
         if curr.base.is_spinner() || curr.idx == 0 {
             return 0.0;
         }
 
-        let next_obj = curr.next(0, diff_objects);
+        let next_obj = diff_objects.get(curr.idx + 1);
         let velocity = (curr.lazy_jump_dist / curr.adjusted_delta_time).max(1.0);
         let current_visible_object_density =
-            Self::retrieve_current_visible_object_density(curr, diff_objects);
+            Self::retrieve_current_visible_object_density(curr, diff_objects, ctx);
         let past_object_difficulty_influence =
-            Self::get_past_object_difficulty_influence(curr, diff_objects);
-        let constant_angle_nerf_factor =
-            Self::get_constant_angle_nerf_factor(curr, diff_objects);
+            Self::get_past_object_difficulty_influence(curr, diff_objects, ctx);
+        let constant_angle_nerf_factor = Self::get_constant_angle_nerf_factor(curr, diff_objects);
 
         let num = Self::calculate_density_difficulty(
             next_obj,
@@ -43,6 +43,7 @@ impl ReadingEvaluator {
                 current_visible_object_density,
                 velocity,
                 constant_angle_nerf_factor,
+                ctx,
             )
         } else {
             0.0
@@ -51,7 +52,7 @@ impl ReadingEvaluator {
         let num3 = Self::calculate_preempt_difficulty(
             velocity,
             constant_angle_nerf_factor,
-            curr.preempt,
+            ctx.preempt_difficulty,
         );
 
         norm(1.5, [num3, num2, num]) * Self::high_bpm_bonus(curr.adjusted_delta_time)
@@ -81,10 +82,9 @@ impl ReadingEvaluator {
     fn calculate_preempt_difficulty(
         velocity: f64,
         constant_angle_nerf_factor: f64,
-        preempt: f64,
+        preempt_difficulty: f64,
     ) -> f64 {
-        ((500.0 - preempt + (preempt - 500.0).abs()) / 2.0).powf(2.5) / 140_000.0
-            * (constant_angle_nerf_factor * velocity)
+        preempt_difficulty * (constant_angle_nerf_factor * velocity)
     }
 
     fn calculate_hidden_difficulty(
@@ -94,15 +94,17 @@ impl ReadingEvaluator {
         current_visible_object_density: f64,
         velocity: f64,
         constant_angle_nerf_factor: f64,
+        ctx: &OsuDifficultyContext,
     ) -> f64 {
-        let num = curr_obj.preempt.powf(2.2) * 0.01;
-        let num2 = (current_visible_object_density + past_object_difficulty_influence).powf(3.3) * 3.0;
+        let num = ctx.hidden_preempt_difficulty;
+        let num2 =
+            (current_visible_object_density + past_object_difficulty_influence).powf(3.3) * 3.0;
         let mut x = (num + num2) * constant_angle_nerf_factor * velocity * 0.01;
         x = x.powf(0.4) * 0.28;
 
         if let Some(prev) = curr_obj.previous(0, diff_objects) {
             if curr_obj.lazy_jump_dist == 0.0
-                && curr_obj.opacity_at(prev.base.start_time, true) == 0.0
+                && curr_obj.opacity_at(prev.base.start_time, true, ctx) == 0.0
                 && prev.start_time > curr_obj.start_time - curr_obj.preempt
             {
                 x += 700.0000000000001 / curr_obj.adjusted_delta_time.powf(1.5);
@@ -115,22 +117,23 @@ impl ReadingEvaluator {
     fn get_past_object_difficulty_influence(
         curr_obj: &OsuDifficultyObject<'_>,
         diff_objects: &[OsuDifficultyObject<'_>],
+        ctx: &OsuDifficultyContext,
     ) -> f64 {
         let mut num = 0.0;
-        for i in 0..curr_obj.idx {
-            let Some(item) = curr_obj.previous(i, diff_objects) else {
-                break;
-            };
 
+        // Same iteration as `for i in 0..curr_obj.idx { previous(i) }`, which
+        // walks `diff_objects[..curr_obj.idx]` from the newest to the oldest.
+        for item in diff_objects[..curr_obj.idx].iter().rev() {
             if curr_obj.start_time - item.start_time > 3000.0
                 || item.start_time < curr_obj.start_time - curr_obj.preempt
             {
                 break;
             }
 
-            let mut num2 = curr_obj.opacity_at(item.base.start_time, false);
+            let mut num2 = curr_obj.opacity_at(item.base.start_time, false, ctx);
             num2 *= smootherstep(item.lazy_jump_dist, 15.0, 150.0);
-            let time_nerf_factor = Self::get_time_nerf_factor(curr_obj.start_time - item.start_time);
+            let time_nerf_factor =
+                Self::get_time_nerf_factor(curr_obj.start_time - item.start_time);
             num2 *= time_nerf_factor;
             num += num2;
         }
@@ -141,11 +144,11 @@ impl ReadingEvaluator {
     fn retrieve_current_visible_object_density(
         curr: &OsuDifficultyObject<'_>,
         diff_objects: &[OsuDifficultyObject<'_>],
+        ctx: &OsuDifficultyContext,
     ) -> f64 {
         let mut num = 0.0;
-        let mut fwd_idx = 0;
 
-        while let Some(next_obj) = curr.next(fwd_idx, diff_objects) {
+        for next_obj in &diff_objects[curr.idx + 1..] {
             if next_obj.start_time - curr.start_time > 3000.0
                 || curr.start_time < next_obj.start_time - next_obj.preempt
             {
@@ -154,8 +157,7 @@ impl ReadingEvaluator {
 
             let time_nerf_factor =
                 Self::get_time_nerf_factor(next_obj.start_time - curr.start_time);
-            num += next_obj.opacity_at(curr.base.start_time, false) * time_nerf_factor;
-            fwd_idx += 1;
+            num += next_obj.opacity_at(curr.base.start_time, false, ctx) * time_nerf_factor;
         }
 
         num
@@ -172,7 +174,6 @@ impl ReadingEvaluator {
         };
 
         let mut num = 0.0;
-        let mut num2 = 0;
         let mut num3 = 0.0;
         let mut osu_diff_obj = curr;
         let mut osu_diff_obj2: Option<&OsuDifficultyObject<'_>> = None;
@@ -181,10 +182,15 @@ impl ReadingEvaluator {
         let curr_start_time = curr.start_time;
         let rad_30 = 30.0_f64.to_radians();
 
-        while num3 < 2000.0 {
-            let Some(osu_diff_obj4) = curr.previous(num2, diff_objects) else {
+        // Start times increase monotonically with the object index, so walking
+        // backwards makes `num3` grow without bound: once the 2000 ms limit is
+        // reached the walk can stop, exactly like the `num3 < 2000.0` loop
+        // condition it replaces. Iterating the slice also removes the
+        // `Option` handling from the loop body.
+        for osu_diff_obj4 in diff_objects[..curr.idx].iter().rev() {
+            if num3 >= 2000.0 {
                 break;
-            };
+            }
 
             let num4 = 1.0 - reverse_lerp(osu_diff_obj4.adjusted_delta_time, 200.0, 2000.0);
 
@@ -220,7 +226,6 @@ impl ReadingEvaluator {
             }
 
             num3 = curr_start_time - osu_diff_obj4.start_time;
-            num2 += 1;
             osu_diff_obj3 = osu_diff_obj2;
             osu_diff_obj2 = Some(osu_diff_obj);
             osu_diff_obj = osu_diff_obj4;

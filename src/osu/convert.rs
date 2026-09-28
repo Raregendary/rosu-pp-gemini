@@ -31,11 +31,23 @@ pub fn convert_objects(
     let mut curve_bufs = CurveBuffers::default();
     // mean=5.16 | median=4
     let mut ticks_buf = Vec::new();
+    // Shared across every slider so the per-slider `nested_objects` vectors do
+    // not each have to grow themselves from empty.
+    let mut nested_buf = Vec::new();
 
     let mut osu_objects: Box<[_]> = map
         .hit_objects
         .iter()
-        .map(|h| OsuObject::new(h, map, reflection, &mut curve_bufs, &mut ticks_buf))
+        .map(|h| {
+            OsuObject::new(
+                h,
+                map,
+                reflection,
+                &mut curve_bufs,
+                &mut ticks_buf,
+                &mut nested_buf,
+            )
+        })
         .inspect(|h| {
             if take == 0 {
                 return;

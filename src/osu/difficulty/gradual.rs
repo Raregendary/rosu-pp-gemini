@@ -17,8 +17,8 @@ use crate::{
 use self::osu_objects::OsuObjects;
 
 use super::{
-    DifficultyValues, OsuDifficultyAttributes, OsuDifficultySetup, object::OsuDifficultyObject,
-    skills::OsuSkills,
+    DifficultyValues, OsuDifficultyAttributes, OsuDifficultySetup, context::OsuDifficultyContext,
+    object::OsuDifficultyObject, skills::OsuSkills,
 };
 
 /// Gradually calculate the difficulty attributes of an osu!standard map.
@@ -150,7 +150,14 @@ fn new(difficulty: Difficulty, map: &Beatmap) -> OsuGradualDifficulty {
         preempt,
     );
 
-    let skills = OsuSkills::new(mods, &scaling_factor, map.hit_objects.len());
+    let ctx = OsuDifficultyContext::new(
+        great_hit_window,
+        preempt,
+        difficulty.get_clock_rate(),
+        scaling_factor.radius,
+    );
+
+    let skills = OsuSkills::new(mods, map.hit_objects.len(), ctx);
     let diff_objects = extend_lifetime(diff_objects.into_boxed_slice());
 
     let score_simulator = GradualLegacyScoreSimulator::new(map, map_attrs);
