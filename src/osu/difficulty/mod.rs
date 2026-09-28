@@ -186,15 +186,18 @@ impl DifficultyValues {
             ..
         } = skills;
 
-        let mut aim = aim.clone();
+        // None of the skills are mutated here: `difficulty_value` and the
+        // `count_top_weighted_*` methods all take `&self`. This matters a lot
+        // for gradual difficulty, which runs `eval` once per hit object -
+        // cloning the skills here would allocate and copy every skill's object
+        // vectors on every single step.
         let aim_difficulty_value = aim.difficulty_value();
         let aim_difficult_strain_count = aim.count_top_weighted_strains(aim_difficulty_value);
         let difficult_sliders = aim.get_difficult_sliders();
 
-        let mut aim_no_sliders = aim_no_sliders.clone();
         let aim_no_sliders_difficulty_value = aim_no_sliders.difficulty_value();
-        let aim_no_sliders_top_weighted_slider_count =
-            aim_no_sliders.count_top_weighted_sliders(aim_no_sliders_difficulty_value);
+        let aim_no_sliders_top_weighted_slider_count = aim_no_sliders
+            .count_top_weighted_sliders(aim_no_sliders_difficulty_value);
         let aim_no_sliders_difficult_strain_count =
             aim_no_sliders.count_top_weighted_strains(aim_no_sliders_difficulty_value);
 
@@ -209,19 +212,17 @@ impl DifficultyValues {
             1.0
         };
 
-        let mut speed = speed.clone();
-        let speed_difficulty_value = speed.difficulty_value();
+        let (speed_difficulty_value, speed_weight_sum) = speed.difficulty_value();
         let speed_top_weighted_slider_count =
-            speed.count_top_weighted_sliders(speed_difficulty_value);
+            speed.count_top_weighted_sliders(speed_difficulty_value, speed_weight_sum);
         let speed_difficult_strain_count =
-            speed.count_top_weighted_object_difficulties(speed_difficulty_value);
+            speed.count_top_weighted_object_difficulties(speed_difficulty_value, speed_weight_sum);
         let speed_top_weighted_slider_factor = speed_top_weighted_slider_count
             / (speed_difficult_strain_count - speed_top_weighted_slider_count).max(1.0);
 
-        let mut reading = reading.clone();
-        let reading_difficulty_value = reading.difficulty_value();
-        let reading_difficult_note_count =
-            reading.count_top_weighted_object_difficulties(reading_difficulty_value);
+        let (reading_difficulty_value, reading_weight_sum) = reading.difficulty_value();
+        let reading_difficult_note_count = reading
+            .count_top_weighted_object_difficulties(reading_difficulty_value, reading_weight_sum);
 
         let aim_rating = calculate_aim_difficulty_rating(aim_difficulty_value);
         let speed_rating = calculate_difficulty_rating(speed_difficulty_value);

@@ -11,6 +11,11 @@ pub struct RhythmEvaluator;
 impl RhythmEvaluator {
     const HISTORY_TIME_MAX: f64 = 5000.0;
     const HISTORY_OBJECTS_MAX: usize = 32;
+    /// The island list grows by at most one entry per processed history object,
+    /// and the history is capped at [`Self::HISTORY_OBJECTS_MAX`], so an inline
+    /// buffer of this size can never overflow. Keeping it on the stack avoids a
+    /// heap allocation for every single hit object.
+    const MAX_ISLANDS: usize = Self::HISTORY_OBJECTS_MAX;
 
     pub fn evaluate_diff_of<'a>(
         curr: &'a OsuDifficultyObject<'a>,
@@ -25,7 +30,8 @@ impl RhythmEvaluator {
 
         let mut island = RhythmIsland::default();
         let mut island2 = RhythmIsland::default();
-        let mut list = Vec::<RhythmIsland>::new();
+        let mut list = [RhythmIsland::EMPTY; Self::MAX_ISLANDS];
+        let mut list_len = 0;
 
         let mut num3 = 0.0;
         let mut flag = false;
@@ -33,12 +39,28 @@ impl RhythmEvaluator {
         let num4 = cmp::min(curr.idx, Self::HISTORY_OBJECTS_MAX);
         let mut i = 0;
 
-        while i + 2 < num4 {
-            let Some(prev) = curr.previous(i, diff_objects) else { break };
-            if curr.start_time - prev.start_time >= Self::HISTORY_TIME_MAX {
-                break;
+        // The history window is `previous(0..=num4 - 3)`, i.e. the object
+        // indices `[idx - num4 + 2, idx)`, walked from the newest to the oldest
+        // object. `i` ends up as the index of the first object further away than
+        // `HISTORY_TIME_MAX`, or `num4 - 2` if there is none.
+        if num4 > 2 {
+            let max_history = num4 - 2;
+            let window = &diff_objects[curr.idx - max_history..curr.idx];
+
+            // Start times increase monotonically, so on dense maps the oldest
+            // object of the window is usually still within the time limit. Then
+            // the whole window qualifies and the per-object scan below can be
+            // skipped entirely.
+            if curr.start_time - window[0].start_time < Self::HISTORY_TIME_MAX {
+                i = max_history;
+            } else {
+                for (k, obj) in window.iter().enumerate().rev() {
+                    if curr.start_time - obj.start_time >= Self::HISTORY_TIME_MAX {
+                        i = max_history - 1 - k;
+                        break;
+                    }
+                }
             }
-            i += 1;
         }
 
         let (Some(mut osu_diff_obj), Some(mut osu_diff_obj2)) =
@@ -105,7 +127,7 @@ impl RhythmEvaluator {
                         }
 
                         let mut flag2 = false;
-                        for item in list.iter_mut() {
+                        for item in list[..list_len].iter_mut() {
                             if item.almost_equals(&island, num2) {
                                 if island2.almost_equals(&island, num2) {
                                     item.occurrences += 1;
@@ -119,8 +141,9 @@ impl RhythmEvaluator {
                             }
                         }
 
-                        if !flag2 && island.delta_count > 0 {
-                            list.push(island);
+                        if !flag2 && island.delta_count > 0 && list_len < Self::MAX_ISLANDS {
+                            list[list_len] = island;
+                            list_len += 1;
                         }
 
                         num13 *= 1.0
@@ -176,6 +199,16 @@ struct RhythmIsland {
     delta: i32,
     delta_count: i32,
     occurrences: i32,
+}
+
+impl RhythmIsland {
+    /// Placeholder used to fill the inline islands buffer. It is never read,
+    /// because the buffer is only ever accessed up to its logical length.
+    const EMPTY: Self = Self {
+        delta: 0,
+        delta_count: 0,
+        occurrences: 0,
+    };
 }
 
 impl Default for RhythmIsland {

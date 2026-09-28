@@ -16,7 +16,6 @@ pub struct Speed {
     timeline_peaks: Vec<f64>,
     timeline_section_end: f64,
     timeline_section_peak: f64,
-    pub object_weight_sum: f64,
     is_relax: bool,
     is_autopilot: bool,
 }
@@ -33,10 +32,21 @@ impl Speed {
             timeline_peaks: Vec::new(),
             timeline_section_end: 0.0,
             timeline_section_peak: 0.0,
-            object_weight_sum: 0.0,
             is_relax: mods.rx(),
             is_autopilot: mods.ap(),
         }
+    }
+
+    pub fn with_capacity(mods: &GameMods, total_objects: usize) -> Self {
+        let mut this = Self::new(mods);
+
+        // These all grow by at most one entry per processed object; reserving up
+        // front avoids repeated reallocation on every calculation.
+        this.object_difficulties = Vec::with_capacity(total_objects);
+        this.slider_strains = Vec::with_capacity(total_objects);
+        this.timeline_peaks = Vec::with_capacity(total_objects / 4 + 1);
+
+        this
     }
 
     fn strain_decay(ms: f64) -> f64 {
@@ -128,8 +138,7 @@ impl Speed {
 
     #[allow(dead_code)]
     pub fn cloned_difficulty_value(&self) -> f64 {
-        let mut clone = self.clone();
-        clone.difficulty_value()
+        self.difficulty_value().0
     }
 
     pub fn into_current_strain_peaks(mut self) -> Vec<f64> {
@@ -137,9 +146,16 @@ impl Speed {
         self.timeline_peaks
     }
 
-    pub fn difficulty_value(&mut self) -> f64 {
+    /// Returns the difficulty value together with the sum of the weights that
+    /// produced it, which [`Self::count_top_weighted_object_difficulties`] and
+    /// [`Self::count_top_weighted_sliders`] need.
+    ///
+    /// This takes `&self` rather than `&mut self` on purpose: `eval` runs once
+    /// per hit object while calculating gradual difficulty, so keeping the
+    /// weight sum in a field would force every caller to clone the whole skill.
+    pub fn difficulty_value(&self) -> (f64, f64) {
         if self.object_difficulties.is_empty() {
-            return 0.0;
+            return (0.0, 0.0);
         }
 
         let mut diffs: Vec<f64> = self
@@ -150,34 +166,38 @@ impl Speed {
             .collect();
 
         if diffs.is_empty() {
-            return 0.0;
+            return (0.0, 0.0);
         }
 
         diffs.sort_by(|a, b| b.total_cmp(a));
 
         let mut num = 0.0;
         let mut num2 = 0;
-        self.object_weight_sum = 0.0;
+        let mut object_weight_sum = 0.0;
 
         for item in diffs {
             let scale_term = Self::HARMONIC_SCALE / (1 + num2) as f64;
             let num3 = (1.0 + scale_term)
                 / ((num2 as f64).powf(Self::DECAY_EXPONENT) + 1.0 + scale_term);
 
-            self.object_weight_sum += num3;
+            object_weight_sum += num3;
             num += item * num3;
             num2 += 1;
         }
 
-        num
+        (num, object_weight_sum)
     }
 
-    pub fn count_top_weighted_object_difficulties(&self, difficulty_value: f64) -> f64 {
-        if self.object_difficulties.is_empty() || FloatExt::eq(self.object_weight_sum, 0.0) {
+    pub fn count_top_weighted_object_difficulties(
+        &self,
+        difficulty_value: f64,
+        object_weight_sum: f64,
+    ) -> f64 {
+        if self.object_difficulties.is_empty() || FloatExt::eq(object_weight_sum, 0.0) {
             return 0.0;
         }
 
-        let consistent_top_object = difficulty_value / self.object_weight_sum;
+        let consistent_top_object = difficulty_value / object_weight_sum;
         if FloatExt::eq(consistent_top_object, 0.0) {
             return 0.0;
         }
@@ -188,12 +208,12 @@ impl Speed {
             .sum()
     }
 
-    pub fn count_top_weighted_sliders(&self, difficulty_value: f64) -> f64 {
-        if self.slider_strains.is_empty() || FloatExt::eq(self.object_weight_sum, 0.0) {
+    pub fn count_top_weighted_sliders(&self, difficulty_value: f64, object_weight_sum: f64) -> f64 {
+        if self.slider_strains.is_empty() || FloatExt::eq(object_weight_sum, 0.0) {
             return 0.0;
         }
 
-        let consistent_top_object = difficulty_value / self.object_weight_sum;
+        let consistent_top_object = difficulty_value / object_weight_sum;
         if FloatExt::eq(consistent_top_object, 0.0) {
             return 0.0;
         }

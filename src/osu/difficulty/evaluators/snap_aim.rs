@@ -74,12 +74,16 @@ impl SnapAimEvaluator {
             num9 *= 0.25
                 + 0.75 * (1.0 - num9.min(Self::calc_angle_wideness(value2).powf(3.0)));
 
-            let mut val = num / curr.adjusted_delta_time.powf(1.45);
+            // The same `powf` is needed again in the slider branch below, so it
+            // is computed once here.
+            let curr_dt_pow = curr.adjusted_delta_time.powf(1.45);
+
+            let mut val = num / curr_dt_pow;
             let val2 = num4 / prev_diff_obj.adjusted_delta_time.powf(1.45);
 
             if prev_diff_obj.base.is_slider() && with_slider_travel_distance {
                 let num10 = prev_diff_obj.lazy_travel_dist + curr.lazy_jump_dist;
-                val = val.max(num10 / curr.adjusted_delta_time.powf(1.45));
+                val = val.max(num10 / curr_dt_pow);
             }
 
             num9 *= val.min(val2);

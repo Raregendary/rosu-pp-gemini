@@ -80,6 +80,21 @@ impl Aim {
         }
     }
 
+    pub fn with_capacity(mods: &GameMods, include_sliders: bool, total_objects: usize) -> Self {
+        let mut this = Self::new(mods, include_sliders);
+
+        // Every one of these grows by at most one entry per processed object, so
+        // reserving up front avoids the repeated reallocation (and copying) that
+        // a growing `Vec` would otherwise perform on every calculation.
+        this.strain_peaks = Vec::with_capacity(64);
+        this.queued_strains = Vec::with_capacity(64);
+        this.object_difficulties = Vec::with_capacity(total_objects);
+        this.slider_strains = Vec::with_capacity(total_objects);
+        this.timeline_peaks = Vec::with_capacity(total_objects / 4 + 1);
+
+        this
+    }
+
     fn strain_decay(ms: f64) -> f64 {
         0.2_f64.powf(ms / 1000.0)
     }
@@ -259,6 +274,12 @@ impl Aim {
         self.current_section_peak = self.calculate_initial_strain(time, curr, diff_objects);
     }
 
+    /// Finalises the stored strain peaks in place.
+    ///
+    /// [`Self::difficulty_value`] deliberately does not use this: `eval` may run
+    /// more than once over the same skill (gradual difficulty), so finalising
+    /// must not mutate shared state.
+    #[expect(dead_code, reason = "kept for the in-place finalisation use case")]
     pub fn get_current_strain_peaks(&mut self) -> &[StrainPeak] {
         if !self.peaks_finalised {
             self.save_current_peak(self.current_section_end - self.current_section_begin);
@@ -267,18 +288,49 @@ impl Aim {
         &self.strain_peaks
     }
 
-    pub fn into_current_strain_peaks(mut self) -> Vec<f64> {
-        self.timeline_peaks.push(self.timeline_section_peak);
+    pub fn into_current_strain_peaks(mut self) -> Vec<f64> {        self.timeline_peaks.push(self.timeline_section_peak);
         self.timeline_peaks
+    }
+
+    /// The strain peaks in their finalised form, without mutating `self`.
+    ///
+    /// This mirrors what [`Self::get_current_strain_peaks`] and
+    /// [`Self::save_current_peak`] would do, but on a copy. `eval` runs once per
+    /// hit object while calculating gradual difficulty, so finalising in place
+    /// would both mutate shared state and force callers to clone the whole
+    /// skill.
+    fn finalised_strain_peaks(&self) -> Vec<StrainPeak> {
+        if self.peaks_finalised {
+            return self.strain_peaks.clone();
+        }
+
+        let mut peaks = self.strain_peaks.clone();
+        let peak = StrainPeak::new(
+            self.current_section_peak,
+            self.current_section_end - self.current_section_begin,
+        );
+
+        let idx = peaks
+            .binary_search_by(|p| p.value.total_cmp(&peak.value).reverse())
+            .unwrap_or_else(|e| e);
+        peaks.insert(idx, peak);
+
+        let mut total_length = self.total_length + peak.section_length;
+
+        while total_length > self.max_stored_length * self.max_section_length {
+            total_length -= peaks.last().unwrap().section_length;
+            peaks.pop();
+        }
+
+        peaks
     }
 
     #[allow(dead_code)]
     pub fn cloned_difficulty_value(&self) -> f64 {
-        let mut clone = self.clone();
-        clone.difficulty_value()
+        self.difficulty_value()
     }
 
-    pub fn difficulty_value(&mut self) -> f64 {
+    pub fn difficulty_value(&self) -> f64 {
         let mut num = 0.0;
         let mut num2 = 0.0;
 
@@ -293,8 +345,8 @@ impl Aim {
         num / (1.0 - self.decay_weight)
     }
 
-    fn get_reduced_strain_peaks(&mut self) -> Vec<StrainPeak> {
-        let peaks = self.get_current_strain_peaks();
+    fn get_reduced_strain_peaks(&self) -> Vec<StrainPeak> {
+        let peaks = self.finalised_strain_peaks();
         let mut list: Vec<StrainPeak> = peaks.iter().copied().filter(|p| p.value > 0.0).collect();
 
         let reduced_section_time = 4000.0;

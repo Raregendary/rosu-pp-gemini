@@ -10,7 +10,6 @@ pub struct Reading {
     current_strain: f64,
     object_difficulties: Vec<f64>,
     start_times: Vec<f64>,
-    pub object_weight_sum: f64,
     is_touch_device: bool,
     is_relax: bool,
     is_autopilot: bool,
@@ -26,11 +25,21 @@ impl Reading {
             current_strain: 0.0,
             object_difficulties: Vec::new(),
             start_times: Vec::new(),
-            object_weight_sum: 0.0,
             is_touch_device: mods.td(),
             is_relax: mods.rx(),
             is_autopilot: mods.ap(),
         }
+    }
+
+    pub fn with_capacity(mods: &GameMods, total_objects: usize) -> Self {
+        let mut this = Self::new(mods);
+
+        // Both grow by at most one entry per processed object; reserving up front
+        // avoids repeated reallocation on every calculation.
+        this.object_difficulties = Vec::with_capacity(total_objects);
+        this.start_times = Vec::with_capacity(total_objects);
+
+        this
     }
 
     fn strain_decay(ms: f64) -> f64 {
@@ -84,13 +93,18 @@ impl Reading {
 
     #[allow(dead_code)]
     pub fn cloned_difficulty_value(&self) -> f64 {
-        let mut clone = self.clone();
-        clone.difficulty_value()
+        self.difficulty_value().0
     }
 
-    pub fn difficulty_value(&mut self) -> f64 {
+    /// Returns the difficulty value together with the sum of the weights that
+    /// produced it, which [`Self::count_top_weighted_object_difficulties`] needs.
+    ///
+    /// This takes `&self` rather than `&mut self` on purpose: `eval` runs once
+    /// per hit object while calculating gradual difficulty, so keeping the
+    /// weight sum in a field would force every caller to clone the whole skill.
+    pub fn difficulty_value(&self) -> (f64, f64) {
         if self.object_difficulties.is_empty() {
-            return 0.0;
+            return (0.0, 0.0);
         }
 
         let mut diffs: Vec<f64> = self
@@ -101,7 +115,7 @@ impl Reading {
             .collect();
 
         if diffs.is_empty() {
-            return 0.0;
+            return (0.0, 0.0);
         }
 
         let num_reduced = self.calculate_reduced_note_count();
@@ -117,19 +131,19 @@ impl Reading {
 
         let mut num = 0.0;
         let mut num2 = 0;
-        self.object_weight_sum = 0.0;
+        let mut object_weight_sum = 0.0;
 
         for item in diffs {
             let scale_term = Self::HARMONIC_SCALE / (1 + num2) as f64;
             let num3 = (1.0 + scale_term)
                 / ((num2 as f64).powf(Self::DECAY_EXPONENT) + 1.0 + scale_term);
 
-            self.object_weight_sum += num3;
+            object_weight_sum += num3;
             num += item * num3;
             num2 += 1;
         }
 
-        num
+        (num, object_weight_sum)
     }
 
     fn calculate_reduced_note_count(&self) -> usize {
@@ -141,12 +155,16 @@ impl Reading {
         self.start_times.iter().take_while(|&&t| t <= cutoff).count()
     }
 
-    pub fn count_top_weighted_object_difficulties(&self, difficulty_value: f64) -> f64 {
-        if self.object_difficulties.is_empty() || FloatExt::eq(self.object_weight_sum, 0.0) {
+    pub fn count_top_weighted_object_difficulties(
+        &self,
+        difficulty_value: f64,
+        object_weight_sum: f64,
+    ) -> f64 {
+        if self.object_difficulties.is_empty() || FloatExt::eq(object_weight_sum, 0.0) {
             return 0.0;
         }
 
-        let consistent_top_note = difficulty_value / self.object_weight_sum;
+        let consistent_top_note = difficulty_value / object_weight_sum;
         if FloatExt::eq(consistent_top_note, 0.0) {
             return 0.0;
         }

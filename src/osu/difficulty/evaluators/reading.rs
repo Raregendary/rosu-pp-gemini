@@ -165,9 +165,11 @@ impl ReadingEvaluator {
         curr: &OsuDifficultyObject<'_>,
         diff_objects: &[OsuDifficultyObject<'_>],
     ) -> f64 {
-        if curr.angle.is_none() {
+        // Hoisted out of the loop below: `curr.angle` and `curr.start_time` never
+        // change, but both were being re-read on every iteration.
+        let Some(curr_angle) = curr.angle else {
             return 1.0;
-        }
+        };
 
         let mut num = 0.0;
         let mut num2 = 0;
@@ -176,6 +178,7 @@ impl ReadingEvaluator {
         let mut osu_diff_obj2: Option<&OsuDifficultyObject<'_>> = None;
         let mut osu_diff_obj3: Option<&OsuDifficultyObject<'_>> = None;
 
+        let curr_start_time = curr.start_time;
         let rad_30 = 30.0_f64.to_radians();
 
         while num3 < 2000.0 {
@@ -185,33 +188,38 @@ impl ReadingEvaluator {
 
             let num4 = 1.0 - reverse_lerp(osu_diff_obj4.adjusted_delta_time, 200.0, 2000.0);
 
-            if let (Some(angle4), Some(curr_angle)) = (osu_diff_obj4.angle, curr.angle) {
-                let val = (curr_angle - angle4).abs();
-                let mut val2 = PI;
+            // `num4` is exactly zero for objects at most 200ms away from their
+            // predecessor, which is very common on dense maps. Those terms
+            // contribute nothing to `num`, so the `cos` can be skipped.
+            if num4 > 0.0 {
+                if let Some(angle4) = osu_diff_obj4.angle {
+                    let val = (curr_angle - angle4).abs();
+                    let mut val2 = PI;
 
-                if let (Some(angle_curr_step), Some(obj2), Some(obj3)) =
-                    (osu_diff_obj.angle, osu_diff_obj2, osu_diff_obj3)
-                {
-                    if let (Some(angle2), Some(angle3)) = (obj2.angle, obj3.angle) {
-                        val2 = (angle2 - angle4).abs();
-                        val2 += (angle3 - angle_curr_step).abs();
+                    if let (Some(angle_curr_step), Some(obj2), Some(obj3)) =
+                        (osu_diff_obj.angle, osu_diff_obj2, osu_diff_obj3)
+                    {
+                        if let (Some(angle2), Some(angle3)) = (obj2.angle, obj3.angle) {
+                            val2 = (angle2 - angle4).abs();
+                            val2 += (angle3 - angle_curr_step).abs();
 
-                        let mut num5 = 1.0;
-                        let min_angle = angle4.min(angle_curr_step) * 180.0 / PI;
-                        let max_angle = angle4.max(angle_curr_step) * 180.0 / PI;
+                            let mut num5 = 1.0;
+                            let min_angle = angle4.min(angle_curr_step) * 180.0 / PI;
+                            let max_angle = angle4.max(angle_curr_step) * 180.0 / PI;
 
-                        num5 *= reverse_lerp(min_angle, 20.0, 5.0);
-                        num5 *= reverse_lerp(max_angle, 60.0, 120.0);
+                            num5 *= reverse_lerp(min_angle, 20.0, 5.0);
+                            num5 *= reverse_lerp(max_angle, 60.0, 120.0);
 
-                        val2 = PI + (0.1 * val2 - PI) * num5;
+                            val2 = PI + (0.1 * val2 - PI) * num5;
+                        }
                     }
-                }
 
-                let num6 = smootherstep(osu_diff_obj4.lazy_jump_dist, 0.0, 50.0);
-                num += (3.0 * rad_30.min(val.min(val2) * num6)).cos() * num4;
+                    let num6 = smootherstep(osu_diff_obj4.lazy_jump_dist, 0.0, 50.0);
+                    num += (3.0 * rad_30.min(val.min(val2) * num6)).cos() * num4;
+                }
             }
 
-            num3 = curr.start_time - osu_diff_obj4.start_time;
+            num3 = curr_start_time - osu_diff_obj4.start_time;
             num2 += 1;
             osu_diff_obj3 = osu_diff_obj2;
             osu_diff_obj2 = Some(osu_diff_obj);

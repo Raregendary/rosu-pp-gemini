@@ -1,3 +1,49 @@
+# v5.0.2 (2026-09-27)
+
+Performance-only release. **No calculated value changes** - every star rating and
+pp value is bit-identical to v5.0.1 (verified over 11 maps x 12 mod combinations
+across all four modes, plus the full test suite).
+
+## Performance
+
+osu!standard difficulty calculation is roughly 3-4% faster than v5.0.1. The bulk
+of the remaining cost is inherent to the new star rating algorithm (see below).
+
+- `DifficultyValues::eval` no longer clones `Aim` (x2), `Speed` and `Reading` on
+  every call. `difficulty_value` and the `count_top_weighted_*` methods now take
+  `&self`; the weight sum that `Speed`/`Reading` used to stash in a field is
+  returned alongside the difficulty value instead. This removes 15 heap
+  allocations plus a full copy of every skill's object vectors per `eval` call,
+  which matters most for gradual difficulty where `eval` runs once per hit
+  object.
+- `RhythmEvaluator` keeps its island list in a fixed-size stack buffer instead
+  of allocating a `Vec` for every hit object.
+- `RhythmEvaluator` determines its history window with a single check for the
+  common dense-map case, instead of walking up to 30 preceding objects one by
+  one just to find where the 5000ms window starts.
+- The `Aim`, `Speed` and `Reading` skills pre-allocate their object vectors, so a
+  difficulty calculation no longer re-allocates them ~`log2(n)` times.
+- `ReadingEvaluator`'s constant-angle nerf loop hoists `curr.angle` and
+  `curr.start_time` out of the loop, and skips the `cos` for terms whose weight
+  is exactly zero (objects at most 200ms after their predecessor).
+- `SnapAimEvaluator` computes `adjusted_delta_time.powf(1.45)` once instead of
+  twice.
+
+## Known: v5.0.0 is significantly slower than 4.0.1
+
+Measured on a Ryzen 7 7800X3D, rosu!standard difficulty calculation is about
+2.0-2.5x slower in 5.x than in 4.0.1, and gradual difficulty/performance is
+about 3-4x slower. This is not an implementation defect but the cost of the new
+star rating algorithm that 5.0.0 adopted: the single aim evaluator was split into
+`snap` + `agility` + `flow`, and a new `reading` skill was added. Profiling puts
+roughly 26% of an osu!standard calculation in `RhythmEvaluator`, 20% in
+`ReadingEvaluator` and 13% in `SnapAimEvaluator`, all of which are
+transcendental-heavy backward scans that the algorithm requires.
+
+osu!taiko, osu!catch and osu!mania are unaffected (within noise) by this release
+and were already unchanged between 4.0.1 and 5.0.0 apart from osu!catch, which
+is ~5-14% slower.
+
 # v4.0.1 (2026-04-12)
 
 Fixed a bug about legacy score miss approximation

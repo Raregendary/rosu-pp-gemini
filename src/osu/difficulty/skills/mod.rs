@@ -23,10 +23,10 @@ impl OsuSkills {
         scaling_factor: &ScalingFactor,
         total_objects: usize,
     ) -> Self {
-        let aim = Aim::new(mods, true);
-        let aim_no_sliders = Aim::new(mods, false);
-        let speed = Speed::new(mods);
-        let reading = Reading::new(mods);
+        let aim = Aim::with_capacity(mods, true, total_objects);
+        let aim_no_sliders = Aim::with_capacity(mods, false, total_objects);
+        let speed = Speed::with_capacity(mods, total_objects);
+        let reading = Reading::with_capacity(mods, total_objects);
         let flashlight = Flashlight::new(mods, scaling_factor.radius, total_objects);
 
         Self {
