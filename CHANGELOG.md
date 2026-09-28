@@ -1,3 +1,34 @@
+# v5.0.3 (2026-09-28)
+
+**No calculated value changes.** Every star rating and pp value is bit-identical to
+v5.0.2, verified over 133 map/mod rows spanning all four modes (`scripts/verify.ps1`),
+against the C# `osu-tools` `PerformanceCalculator` over 50 map/mod combinations, and
+across the full test suite in both the sequential and `rayon` builds. The four
+pre-existing osu!standard strain series are also bit-identical to v5.0.2.
+
+## Added
+
+- **`OsuStrains::reading`** (`rosu_pp::osu::OsuStrains`): the osu!standard `reading`
+  skill's strain peaks are now published alongside `aim`, `aim_no_sliders`, `speed` and
+  `flashlight`. Previously the skill was computed and discarded. The series uses the
+  same fixed `OsuStrains::SECTION_LEN` (400 ms) sections as the other osu!standard
+  series, so all five index against the same x-axis, and silent gaps yield `0.0`
+  sections rather than collapsing the vector. `OsuDifficultyAttributes::reading`,
+  `reading_difficult_note_count` and `OsuPerformanceAttributes::pp_reading` are
+  untouched.
+- **`Difficulty::RAYON_MIN_OBJECTS`** (`rayon` feature): the object count below which
+  sequential evaluation beats thread dispatch, currently `70`.
+- **`Difficulty::parallel`** (`rayon` feature): overrides the automatic choice and
+  forces parallel or sequential skill evaluation. Results are bit-identical either
+  way.
+
+## Performance
+
+osu!standard difficulty is ~9% faster than v5.0.2 on the default single-threaded build
+and gradual difficulty ~28% faster, measured with `osu-pp-bench` against a pinned
+v5.0.2 reference crate in the same process. The per-object cost of the new section
+bookkeeping is more than covered by the shared-aim-evaluation work.
+
 # v5.0.2 (2026-09-28)
 
 Performance-focused release. **No calculated value changes** - every star rating and
