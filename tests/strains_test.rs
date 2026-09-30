@@ -117,8 +117,16 @@ fn test_reading_strains_parallel_parity() {
     };
 
     assert_eq!(seq_strains.reading.len(), par_strains.reading.len());
-    for (i, (s, p)) in seq_strains.reading.iter().zip(&par_strains.reading).enumerate() {
-        assert_eq!(s.to_bits(), p.to_bits(), "mismatch in reading strain at section {i}");
+    for (i, (s, p)) in seq_strains
+        .reading
+        .iter()
+        .zip(&par_strains.reading)
+        .enumerate()
+    {
+        assert_eq!(
+            s.to_bits(),
+            p.to_bits(),
+            "mismatch in reading strain at section {i}"
+        );
     }
 }
-

@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use crate::{
     any::difficulty::object::IDifficultyObject,
     model::mods::GameMods,
@@ -60,7 +62,11 @@ pub struct Aim {
     current_section_end: f64,
     total_length: f64,
     strain_peaks: Vec<StrainPeak>,
-    queued_strains: Vec<(f64, f64)>,
+    /// Deferred section peaks, consumed oldest-first by
+    /// [`Self::backfill_peaks`]. A `VecDeque` rather than a `Vec` because the
+    /// front element is popped once per section: `Vec::remove(0)` would shift
+    /// the whole tail on every 400 ms section.
+    queued_strains: VecDeque<(f64, f64)>,
     peaks_finalised: bool,
     object_difficulties: Vec<f64>,
     slider_strains: Vec<f64>,
@@ -127,7 +133,7 @@ impl Aim {
             current_section_end: 0.0,
             total_length: 0.0,
             strain_peaks: Vec::new(),
-            queued_strains: Vec::new(),
+            queued_strains: VecDeque::new(),
             peaks_finalised: false,
             object_difficulties: Vec::new(),
             slider_strains: Vec::new(),
@@ -156,7 +162,7 @@ impl Aim {
         // reserving up front avoids the repeated reallocation (and copying) that
         // a growing `Vec` would otherwise perform on every calculation.
         this.strain_peaks = Vec::with_capacity(64);
-        this.queued_strains = Vec::with_capacity(64);
+        this.queued_strains = VecDeque::with_capacity(64);
         this.object_difficulties = Vec::with_capacity(total_objects);
         this.slider_strains = Vec::with_capacity(total_objects);
         this.timeline_peaks = Vec::with_capacity(total_objects / 4 + 1);
@@ -338,13 +344,13 @@ impl Aim {
             self.current_section_end = self.current_section_begin + self.max_section_length;
             self.current_section_peak = num;
         } else {
-            while let Some(last) = self.queued_strains.last() {
+            while let Some(last) = self.queued_strains.back() {
                 if last.0 >= num {
                     break;
                 }
-                self.queued_strains.pop();
+                self.queued_strains.pop_back();
             }
-            self.queued_strains.push((num, curr.start_time));
+            self.queued_strains.push_back((num, curr.start_time));
         }
     }
 
@@ -481,8 +487,7 @@ impl Aim {
             self.save_current_peak(self.current_section_end - self.current_section_begin);
             self.current_section_begin = self.current_section_end;
 
-            if !self.queued_strains.is_empty() {
-                let (val, num) = self.queued_strains.remove(0);
+            if let Some((val, num)) = self.queued_strains.pop_front() {
                 self.current_section_end = num + self.max_section_length;
                 self.start_new_section_from(self.current_section_begin, curr, diff_objects);
                 self.current_section_peak = self.current_section_peak.max(val);
