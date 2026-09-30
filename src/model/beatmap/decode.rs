@@ -134,7 +134,7 @@ impl BeatmapState {
         fn read_point(value: &str, start_pos: Pos) -> Result<PathControlPoint, ParseBeatmapError> {
             let mut v = value
                 .split(':')
-                .map(|s| s.parse_with_limits(f64::from(MAX_COORDINATE_VALUE)));
+                .map(|s| num_fast::f64_limited(s, f64::from(MAX_COORDINATE_VALUE)));
 
             let (x, y) = v
                 .next()
@@ -436,6 +436,94 @@ impl From<ParseDifficultyError> for ParseBeatmapError {
 
 const MAX_COORDINATE_VALUE: i32 = 131_072;
 
+/// Fast paths for the number shapes that dominate `.osu` files.
+///
+/// Coordinates, start times, control points, and slider lengths are almost
+/// always written as short decimal integers. For those, a digit loop produces
+/// exactly the value `str::parse` would - a `u64` below `10^15` converts to
+/// `f64` exactly, and to `f32` with the same round-to-nearest the float parser
+/// performs - so the general-purpose float parser can be skipped entirely.
+/// Anything else (a sign, a decimal point, an exponent, whitespace, a non-digit,
+/// or 16+ digits) falls through to [`ParseNumber`], which keeps the accepted
+/// input set and every error case identical.
+mod num_fast {
+    use rosu_map::util::{MAX_PARSE_VALUE, ParseNumber, ParseNumberError};
+
+    /// The digit value if `s` is 1..=15 ASCII digits, else `None`.
+    #[inline]
+    fn digits(s: &str) -> Option<u64> {
+        let bytes = s.as_bytes();
+
+        if bytes.is_empty() || bytes.len() > 15 {
+            return None;
+        }
+
+        let mut n: u64 = 0;
+
+        for &b in bytes {
+            if !b.is_ascii_digit() {
+                return None;
+            }
+
+            n = n * 10 + u64::from(b - b'0');
+        }
+
+        Some(n)
+    }
+
+    /// `s.parse_with_limits(limit)` for `f32`.
+    #[inline]
+    pub fn f32_limited(s: &str, limit: f32) -> Result<f32, ParseNumberError> {
+        let Some(n) = digits(s) else {
+            return f32::parse_with_limits(s, limit);
+        };
+
+        let value = n as f32;
+
+        if value > limit {
+            Err(ParseNumberError::NumberOverflow)
+        } else {
+            Ok(value)
+        }
+    }
+
+    /// `s.parse_with_limits(limit)` for `f64`.
+    #[inline]
+    pub fn f64_limited(s: &str, limit: f64) -> Result<f64, ParseNumberError> {
+        let Some(n) = digits(s) else {
+            return f64::parse_with_limits(s, limit);
+        };
+
+        let value = n as f64;
+
+        if value > limit {
+            Err(ParseNumberError::NumberOverflow)
+        } else {
+            Ok(value)
+        }
+    }
+
+    /// `s.parse_with_limits(MAX_PARSE_VALUE)` for `i32`.
+    #[inline]
+    pub fn i32_limited(s: &str, limit: i32) -> Result<i32, ParseNumberError> {
+        let Some(n) = digits(s) else {
+            return i32::parse_with_limits(s, limit);
+        };
+
+        if n > limit as u64 {
+            Err(ParseNumberError::NumberOverflow)
+        } else {
+            Ok(n as i32)
+        }
+    }
+
+    /// `s.parse_num::<f64>()`, i.e. with the default [`MAX_PARSE_VALUE`] limit.
+    #[inline]
+    pub fn f64_default(s: &str) -> Result<f64, ParseNumberError> {
+        f64_limited(s, f64::from(MAX_PARSE_VALUE))
+    }
+}
+
 impl DecodeBeatmap for Beatmap {
     type Error = ParseBeatmapError;
     type State = BeatmapState;
@@ -523,7 +611,7 @@ impl DecodeBeatmap for Beatmap {
             .zip(split.next())
             .ok_or(ParseBeatmapError::InvalidTimingPointLine)?;
 
-        let time = time.parse_num::<f64>()?;
+        let time = num_fast::f64_default(time)?;
 
         // Manual `str::parse_num::<f64>` so that NaN does not cause an error
         let beat_len = beat_len
@@ -544,7 +632,7 @@ impl DecodeBeatmap for Beatmap {
         };
 
         if let Some(numerator) = split.next()
-            && unlikely(i32::parse(numerator)? < 1)
+            && unlikely(num_fast::i32_limited(numerator, MAX_PARSE_VALUE)? < 1)
         {
             return Err(ParseBeatmapError::TimeSignature);
         }
@@ -607,11 +695,11 @@ impl DecodeBeatmap for Beatmap {
         };
 
         let pos = Pos {
-            x: x.parse_with_limits(MAX_COORDINATE_VALUE as f32)? as i32 as f32,
-            y: y.parse_with_limits(MAX_COORDINATE_VALUE as f32)? as i32 as f32,
+            x: num_fast::f32_limited(x, MAX_COORDINATE_VALUE as f32)? as i32 as f32,
+            y: num_fast::f32_limited(y, MAX_COORDINATE_VALUE as f32)? as i32 as f32,
         };
 
-        let start_time = f64::parse(start_time)?;
+        let start_time = num_fast::f64_default(start_time)?;
         let hit_object_type: HitObjectType = kind.parse()?;
 
         let mut sound: HitSoundType = sound_type.parse()?;
@@ -650,7 +738,7 @@ impl DecodeBeatmap for Beatmap {
 
             let mut len = None;
 
-            let repeats = repeat_count.parse_num::<i32>()?;
+            let repeats = num_fast::i32_limited(repeat_count, MAX_PARSE_VALUE)?;
 
             if unlikely(repeats > 9000) {
                 return Err(ParseBeatmapError::InvalidRepeatCount);
@@ -659,9 +747,8 @@ impl DecodeBeatmap for Beatmap {
             let repeats = cmp::max(0, repeats - 1) as usize;
 
             if let Some(next) = split.next() {
-                let new_len = next
-                    .parse_with_limits(f64::from(MAX_COORDINATE_VALUE))?
-                    .max(0.0);
+                let new_len =
+                    num_fast::f64_limited(next, f64::from(MAX_COORDINATE_VALUE))?.max(0.0);
 
                 if new_len.not_eq(0.0) {
                     len = Some(new_len);
