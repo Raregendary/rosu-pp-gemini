@@ -1,3 +1,30 @@
+# v5.0.4 (2026-10-02)
+
+**No change to default results.** Every star rating and pp value is bit-identical
+to v5.0.3: the new `ignore_nf` flag is opt-in and defaults to `false`, and the
+decoding fast path is bit-identical.
+
+## Added
+
+- Per-call `ignore_nf(bool)` flag (default `false`) on `OsuPerformance`,
+  `CatchPerformance`, `ManiaPerformance`, `TaikoPerformance`, the generic
+  `Performance` enum, and all four gradual performance calculators. When `true`,
+  an active NF mod is treated as absent for pp: osu!standard skips both the
+  multiplier penalty and the NF branch of the legacy-score miss estimate, while
+  catch and mania skip their NF multiplier. Taiko stores the flag (including
+  forwarding through `Performance` and `GradualPerformance`) but ignores it
+  since taiko has no NF penalty.
+
+## Performance
+
+- Beatmap decoding (`.osu` number parsing) is about **6.7% faster** than v5.0.3.
+  Measured with `osu-pp-bench --group ab-decode` over 11 maps: -7.67% geomean
+  against a reference that shares the same run-to-run noise floor at -0.8 to
+  -1.0%. The accepted input set and the decoded values are unchanged.
+- `Aim::backfill_peaks` pops queued strains from a `VecDeque` instead of
+  shifting a `Vec` tail on every 400 ms section. Bit-identical and below the
+  benchmark noise floor.
+
 # v5.0.3 (2026-09-28)
 
 **No calculated value changes.** Every star rating and pp value is bit-identical to

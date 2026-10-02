@@ -1,8 +1,8 @@
 [package]
 name = "rosu-pp-gemini"
-version = "5.0.3"
+version = "5.0.4"
 edition = "2024"
-authors = ["MaxOhn <ohn.m@hotmail.de>", "Raregendary <thehellpuma@gmail.com>"]
+authors = ["MaxOhn <ohn.m@hotmail.de>", "Raregendary <raregendary@gmail.com>"]
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/Raregendary/rosu-pp-gemini"
