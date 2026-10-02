@@ -503,17 +503,31 @@ mod num_fast {
         }
     }
 
-    /// `s.parse_with_limits(MAX_PARSE_VALUE)` for `i32`.
+    /// `s.parse_with_limits(limit)` for `i32`.
     #[inline]
     pub fn i32_limited(s: &str, limit: i32) -> Result<i32, ParseNumberError> {
         let Some(n) = digits(s) else {
             return i32::parse_with_limits(s, limit);
         };
 
-        if n > limit as u64 {
+        // `str::parse::<i32>` fails with `InvalidInteger(PosOverflow)` above
+        // `i32::MAX`; fall through so the error variant stays identical
+        // (it only surfaces in `tracing` logs - the line is skipped either way).
+        if n > i32::MAX as u64 {
+            return i32::parse_with_limits(s, limit);
+        }
+
+        // `n <= i32::MAX` so the cast is exact; compare as `i64` to mirror
+        // `ParseNumber`'s underflow-first ordering even for negative limits.
+        let value = n as i64;
+        let limit = i64::from(limit);
+
+        if value < -limit {
+            Err(ParseNumberError::NumberUnderflow)
+        } else if value > limit {
             Err(ParseNumberError::NumberOverflow)
         } else {
-            Ok(n as i32)
+            Ok(value as i32)
         }
     }
 
