@@ -7,6 +7,7 @@ pub(super) struct CatchPerformanceCalculator<'mods> {
     attrs: CatchDifficultyAttributes,
     mods: &'mods GameMods,
     state: CatchScoreState,
+    ignore_nf: bool,
 }
 
 impl<'a> CatchPerformanceCalculator<'a> {
@@ -14,8 +15,14 @@ impl<'a> CatchPerformanceCalculator<'a> {
         attrs: CatchDifficultyAttributes,
         mods: &'a GameMods,
         state: CatchScoreState,
+        ignore_nf: bool,
     ) -> Self {
-        Self { attrs, mods, state }
+        Self {
+            attrs,
+            mods,
+            state,
+            ignore_nf,
+        }
     }
 }
 
@@ -85,7 +92,7 @@ impl CatchPerformanceCalculator<'_> {
         pp *= self.state.hitresults.accuracy().powf(5.5);
 
         // NF penalty
-        if self.mods.nf() {
+        if self.mods.nf() && !self.ignore_nf {
             pp *= (1.0 - 0.02 * f64::from(self.state.hitresults.misses)).max(0.9);
         }
 

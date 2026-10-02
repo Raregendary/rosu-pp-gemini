@@ -78,6 +78,7 @@ use super::{OsuPerformanceAttributes, OsuScoreState};
 /// [`nth`]: OsuGradualPerformance::nth
 pub struct OsuGradualPerformance {
     lazer: bool,
+    ignore_nf: bool,
     difficulty: OsuGradualDifficulty,
 }
 
@@ -87,7 +88,11 @@ impl OsuGradualPerformance {
         let lazer = difficulty.get_lazer();
         let difficulty = OsuGradualDifficulty::new(difficulty, map)?;
 
-        Ok(Self { lazer, difficulty })
+        Ok(Self {
+            lazer,
+            ignore_nf: false,
+            difficulty,
+        })
     }
 
     /// Same as [`OsuGradualPerformance::new`] but verifies that the map is
@@ -96,7 +101,21 @@ impl OsuGradualPerformance {
         let lazer = difficulty.get_lazer();
         let difficulty = OsuGradualDifficulty::checked_new(difficulty, map)?;
 
-        Ok(Self { lazer, difficulty })
+        Ok(Self {
+            lazer,
+            ignore_nf: false,
+            difficulty,
+        })
+    }
+
+    /// Whether to ignore the `NoFail` mod's pp penalty for this calculation.
+    ///
+    /// Defaults to `false`.
+    #[must_use]
+    pub const fn ignore_nf(mut self, ignore_nf: bool) -> Self {
+        self.ignore_nf = ignore_nf;
+
+        self
     }
 
     /// Process the next hit object and calculate the performance attributes
@@ -123,6 +142,7 @@ impl OsuGradualPerformance {
             .nth(n)?
             .performance()
             .lazer(self.lazer)
+            .ignore_nf(self.ignore_nf)
             .state(state)
             .difficulty(self.difficulty.difficulty.clone())
             .passed_objects(self.difficulty.idx as u32)

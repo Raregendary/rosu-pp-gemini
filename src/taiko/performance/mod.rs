@@ -38,6 +38,8 @@ pub struct TaikoPerformance<'map> {
     misses: Option<u32>,
     hitresult_priority: HitResultPriority,
     hitresult_generator: Option<fn(InspectTaikoPerformance<'_>) -> TaikoHitResults>,
+    // Stored for API symmetry; taiko has no NF penalty so it is ignored.
+    ignore_nf: bool,
 }
 
 // Manual implementation because of the `hitresult_generator` function pointer
@@ -53,6 +55,7 @@ impl PartialEq for TaikoPerformance<'_> {
             misses,
             hitresult_priority,
             hitresult_generator: _,
+            ignore_nf,
         } = self;
 
         map_or_attrs == &other.map_or_attrs
@@ -63,6 +66,7 @@ impl PartialEq for TaikoPerformance<'_> {
             && n100 == &other.n100
             && misses == &other.misses
             && hitresult_priority == &other.hitresult_priority
+            && ignore_nf == &other.ignore_nf
     }
 }
 
@@ -148,7 +152,18 @@ impl<'map> TaikoPerformance<'map> {
             misses: self.misses,
             hitresult_priority: self.hitresult_priority,
             hitresult_generator: Some(H::generate_hitresults),
+            ignore_nf: self.ignore_nf,
         }
+    }
+
+    /// Whether to ignore the `NoFail` mod's pp penalty for this calculation.
+    ///
+    /// Defaults to `false`. Stored for API symmetry; taiko has no NF penalty
+    /// so the flag has no effect.
+    pub const fn ignore_nf(mut self, ignore_nf: bool) -> Self {
+        self.ignore_nf = ignore_nf;
+
+        self
     }
 
     /// Specify the amount of 300s of a play.
@@ -337,6 +352,7 @@ impl<'map> TaikoPerformance<'map> {
             n100: None,
             hitresult_priority: HitResultPriority::DEFAULT,
             hitresult_generator: None,
+            ignore_nf: false,
         }
     }
 }
@@ -376,6 +392,7 @@ impl<'map> TryFrom<OsuPerformance<'map>> for TaikoPerformance<'map> {
             hitresult_priority,
             hitresult_generator: _,
             legacy_total_score: _,
+            ignore_nf,
         } = osu;
 
         Ok(Self {
@@ -388,6 +405,7 @@ impl<'map> TryFrom<OsuPerformance<'map>> for TaikoPerformance<'map> {
             misses,
             hitresult_priority,
             hitresult_generator: None,
+            ignore_nf,
         })
     }
 }

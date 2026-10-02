@@ -85,6 +85,7 @@ use crate::{
 /// [`next`]: CatchGradualPerformance::next
 /// [`nth`]: CatchGradualPerformance::nth
 pub struct CatchGradualPerformance {
+    ignore_nf: bool,
     difficulty: CatchGradualDifficulty,
 }
 
@@ -93,7 +94,10 @@ impl CatchGradualPerformance {
     pub fn new(difficulty: Difficulty, map: &Beatmap) -> Result<Self, ConvertError> {
         let difficulty = CatchGradualDifficulty::new(difficulty, map)?;
 
-        Ok(Self { difficulty })
+        Ok(Self {
+            ignore_nf: false,
+            difficulty,
+        })
     }
 
     /// Same as [`CatchGradualPerformance::new`] but verifies that the map is
@@ -101,7 +105,20 @@ impl CatchGradualPerformance {
     pub fn checked_new(difficulty: Difficulty, map: &Beatmap) -> Result<Self, CalculateError> {
         let difficulty = CatchGradualDifficulty::checked_new(difficulty, map)?;
 
-        Ok(Self { difficulty })
+        Ok(Self {
+            ignore_nf: false,
+            difficulty,
+        })
+    }
+
+    /// Whether to ignore the `NoFail` mod's pp penalty for this calculation.
+    ///
+    /// Defaults to `false`.
+    #[must_use]
+    pub const fn ignore_nf(mut self, ignore_nf: bool) -> Self {
+        self.ignore_nf = ignore_nf;
+
+        self
     }
 
     /// Process the next hit object and calculate the performance attributes
@@ -130,6 +147,7 @@ impl CatchGradualPerformance {
             .difficulty
             .nth(n)?
             .performance()
+            .ignore_nf(self.ignore_nf)
             .state(state)
             .difficulty(self.difficulty.difficulty.clone())
             .passed_objects(self.difficulty.idx as u32)

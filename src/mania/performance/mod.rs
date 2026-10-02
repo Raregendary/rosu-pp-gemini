@@ -38,6 +38,7 @@ pub struct ManiaPerformance<'map> {
     acc: Option<f64>,
     hitresult_priority: HitResultPriority,
     hitresult_generator: Option<fn(InspectManiaPerformance<'_>) -> ManiaHitResults>,
+    ignore_nf: bool,
 }
 
 // Manual implementation because of the `hitresult_generator` function pointer
@@ -55,6 +56,7 @@ impl PartialEq for ManiaPerformance<'_> {
             acc,
             hitresult_priority,
             hitresult_generator: _,
+            ignore_nf,
         } = self;
 
         map_or_attrs == &other.map_or_attrs
@@ -67,6 +69,7 @@ impl PartialEq for ManiaPerformance<'_> {
             && misses == &other.misses
             && acc == &other.acc
             && hitresult_priority == &other.hitresult_priority
+            && ignore_nf == &other.ignore_nf
     }
 }
 
@@ -219,7 +222,17 @@ impl<'map> ManiaPerformance<'map> {
             acc: self.acc,
             hitresult_priority: self.hitresult_priority,
             hitresult_generator: Some(H::generate_hitresults),
+            ignore_nf: self.ignore_nf,
         }
+    }
+
+    /// Whether to ignore the `NoFail` mod's pp penalty for this calculation.
+    ///
+    /// Defaults to `false`.
+    pub const fn ignore_nf(mut self, ignore_nf: bool) -> Self {
+        self.ignore_nf = ignore_nf;
+
+        self
     }
 
     /// Whether the calculated attributes belong to an osu!lazer or osu!stable
@@ -337,7 +350,13 @@ impl<'map> ManiaPerformance<'map> {
         // SAFETY: Attributes are calculated in `generate_state`.
         let attrs = unsafe { self.map_or_attrs.into_attrs() };
 
-        Ok(ManiaPerformanceCalculator::new(attrs, self.difficulty.get_mods(), state).calculate())
+        Ok(ManiaPerformanceCalculator::new(
+            attrs,
+            self.difficulty.get_mods(),
+            state,
+            self.ignore_nf,
+        )
+        .calculate())
     }
 
     /// Same as [`ManiaPerformance::calculate`] but verifies that the map was
@@ -348,7 +367,13 @@ impl<'map> ManiaPerformance<'map> {
         // SAFETY: Attributes are calculated in `checked_generate_state`.
         let attrs = unsafe { self.map_or_attrs.into_attrs() };
 
-        Ok(ManiaPerformanceCalculator::new(attrs, self.difficulty.get_mods(), state).calculate())
+        Ok(ManiaPerformanceCalculator::new(
+            attrs,
+            self.difficulty.get_mods(),
+            state,
+            self.ignore_nf,
+        )
+        .calculate())
     }
 
     pub(crate) const fn from_map_or_attrs(map_or_attrs: MapOrAttrs<'map, Mania>) -> Self {
@@ -364,6 +389,7 @@ impl<'map> ManiaPerformance<'map> {
             acc: None,
             hitresult_priority: HitResultPriority::DEFAULT,
             hitresult_generator: None,
+            ignore_nf: false,
         }
     }
 }
@@ -403,6 +429,7 @@ impl<'map> TryFrom<OsuPerformance<'map>> for ManiaPerformance<'map> {
             hitresult_priority,
             hitresult_generator: _,
             legacy_total_score: _,
+            ignore_nf,
         } = osu;
 
         Ok(Self {
@@ -417,6 +444,7 @@ impl<'map> TryFrom<OsuPerformance<'map>> for ManiaPerformance<'map> {
             acc,
             hitresult_priority,
             hitresult_generator: None,
+            ignore_nf,
         })
     }
 }

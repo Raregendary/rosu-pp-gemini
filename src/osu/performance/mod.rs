@@ -49,6 +49,7 @@ pub struct OsuPerformance<'map> {
     pub(crate) legacy_total_score: Option<u32>,
     pub(crate) hitresult_priority: HitResultPriority,
     pub(crate) hitresult_generator: Option<fn(InspectOsuPerformance<'_>) -> OsuHitResults>,
+    pub(crate) ignore_nf: bool,
 }
 
 // Manual implementation because of the `hitresult_generator` function pointer
@@ -69,6 +70,7 @@ impl PartialEq for OsuPerformance<'_> {
             hitresult_priority,
             hitresult_generator: _,
             legacy_total_score,
+            ignore_nf,
         } = self;
 
         map_or_attrs == &other.map_or_attrs
@@ -84,6 +86,7 @@ impl PartialEq for OsuPerformance<'_> {
             && misses == &other.misses
             && hitresult_priority == &other.hitresult_priority
             && legacy_total_score == &other.legacy_total_score
+            && ignore_nf == &other.ignore_nf
     }
 }
 
@@ -223,7 +226,17 @@ impl<'map> OsuPerformance<'map> {
             hitresult_priority: self.hitresult_priority,
             hitresult_generator: Some(H::generate_hitresults),
             legacy_total_score: self.legacy_total_score,
+            ignore_nf: self.ignore_nf,
         }
+    }
+
+    /// Whether to ignore the `NoFail` mod's pp penalty for this calculation.
+    ///
+    /// Defaults to `false`.
+    pub const fn ignore_nf(mut self, ignore_nf: bool) -> Self {
+        self.ignore_nf = ignore_nf;
+
+        self
     }
 
     /// Whether the calculated attributes belong to an osu!lazer or osu!stable
@@ -512,6 +525,7 @@ impl<'map> OsuPerformance<'map> {
             hitresult_priority: HitResultPriority::DEFAULT,
             hitresult_generator: None,
             legacy_total_score: None,
+            ignore_nf: false,
         }
     }
 
@@ -640,7 +654,14 @@ unsafe fn calculate(perf: OsuPerformance<'_>, state: OsuScoreState) -> OsuPerfor
 
     let acc = state.hitresults.accuracy(origin);
 
-    let inner = OsuPerformanceCalculator::new(attrs, mods, acc, state, using_classic_slider_acc);
+    let inner = OsuPerformanceCalculator::new(
+        attrs,
+        mods,
+        acc,
+        state,
+        using_classic_slider_acc,
+        perf.ignore_nf,
+    );
 
     inner.calculate()
 }

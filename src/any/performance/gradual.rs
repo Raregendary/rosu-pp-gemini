@@ -129,6 +129,20 @@ impl GradualPerformance {
         }
     }
 
+    /// Whether to ignore the `NoFail` mod's pp penalty for this calculation.
+    ///
+    /// Defaults to `false`. Taiko stores the flag but ignores it since taiko
+    /// has no NF penalty.
+    #[must_use]
+    pub fn ignore_nf(self, ignore_nf: bool) -> Self {
+        match self {
+            Self::Osu(gradual) => Self::Osu(gradual.ignore_nf(ignore_nf)),
+            Self::Taiko(gradual) => Self::Taiko(gradual.ignore_nf(ignore_nf)),
+            Self::Catch(gradual) => Self::Catch(gradual.ignore_nf(ignore_nf)),
+            Self::Mania(gradual) => Self::Mania(gradual.ignore_nf(ignore_nf)),
+        }
+    }
+
     /// Process the next hit object and calculate the performance attributes
     /// for the resulting score state.
     pub fn next(&mut self, state: ScoreState) -> Option<PerformanceAttributes> {

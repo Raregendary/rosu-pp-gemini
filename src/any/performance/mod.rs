@@ -145,6 +145,19 @@ impl<'map> Performance<'map> {
         forward_to_variants!(self => |perf| Self(perf.mods(mods)))
     }
 
+    /// Whether to ignore the `NoFail` mod's pp penalty for this calculation.
+    ///
+    /// Defaults to `false`. Taiko stores the flag but ignores it since taiko
+    /// has no NF penalty.
+    pub fn ignore_nf(self, ignore_nf: bool) -> Self {
+        match self {
+            Self::Osu(perf) => Self::Osu(perf.ignore_nf(ignore_nf)),
+            Self::Taiko(perf) => Self::Taiko(perf.ignore_nf(ignore_nf)),
+            Self::Catch(perf) => Self::Catch(perf.ignore_nf(ignore_nf)),
+            Self::Mania(perf) => Self::Mania(perf.ignore_nf(ignore_nf)),
+        }
+    }
+
     /// Use the specified settings of the given [`Difficulty`].
     pub fn difficulty(self, difficulty: Difficulty) -> Self {
         forward_to_variants!(self => |perf| Self(perf.difficulty(difficulty)))

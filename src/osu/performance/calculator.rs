@@ -22,6 +22,7 @@ pub(super) struct OsuPerformanceCalculator<'mods> {
     acc: f64,
     state: OsuScoreState,
     using_classic_slider_acc: bool,
+    ignore_nf: bool,
 }
 
 impl<'a> OsuPerformanceCalculator<'a> {
@@ -31,6 +32,7 @@ impl<'a> OsuPerformanceCalculator<'a> {
         acc: f64,
         state: OsuScoreState,
         using_classic_slider_acc: bool,
+        ignore_nf: bool,
     ) -> Self {
         Self {
             attrs,
@@ -38,6 +40,7 @@ impl<'a> OsuPerformanceCalculator<'a> {
             acc,
             state,
             using_classic_slider_acc,
+            ignore_nf,
         }
     }
 }
@@ -62,16 +65,16 @@ impl OsuPerformanceCalculator<'_> {
         let combo_based_estimated_miss_count = self.calculate_combo_based_estimated_miss_count();
         let mut score_based_estimated_miss_count = None;
 
-        let mut effective_miss_count = if using_classic_slider_acc
-            && state.legacy_total_score.is_some()
-        {
-            let legacy_score_miss_calc = OsuLegacyScoreMissCalculator::new(state, acc, mods, attrs);
+        let mut effective_miss_count =
+            if using_classic_slider_acc && state.legacy_total_score.is_some() {
+                let legacy_score_miss_calc =
+                    OsuLegacyScoreMissCalculator::new(state, acc, mods, attrs, self.ignore_nf);
 
-            *score_based_estimated_miss_count.insert(legacy_score_miss_calc.calculate())
-        } else {
-            // * Use combo-based miss count if this isn't a legacy score
-            combo_based_estimated_miss_count
-        };
+                *score_based_estimated_miss_count.insert(legacy_score_miss_calc.calculate())
+            } else {
+                // * Use combo-based miss count if this isn't a legacy score
+                combo_based_estimated_miss_count
+            };
 
         effective_miss_count = effective_miss_count.max(f64::from(state.hitresults.misses));
         effective_miss_count = effective_miss_count.min(f64::from(state.hitresults.total_hits()));
@@ -80,7 +83,7 @@ impl OsuPerformanceCalculator<'_> {
 
         let mut multiplier = PERFORMANCE_BASE_MULTIPLIER;
 
-        if self.mods.nf() {
+        if self.mods.nf() && !self.ignore_nf {
             multiplier *= (1.0 - 0.02 * effective_miss_count).max(0.9);
         }
 

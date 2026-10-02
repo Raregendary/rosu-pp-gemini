@@ -79,6 +79,7 @@ use super::TaikoPerformanceAttributes;
 /// [`next`]: TaikoGradualPerformance::next
 /// [`nth`]: TaikoGradualPerformance::nth
 pub struct TaikoGradualPerformance {
+    ignore_nf: bool,
     difficulty: TaikoGradualDifficulty,
 }
 
@@ -87,7 +88,10 @@ impl TaikoGradualPerformance {
     pub fn new(difficulty: Difficulty, map: &Beatmap) -> Result<Self, ConvertError> {
         let difficulty = TaikoGradualDifficulty::new(difficulty, map)?;
 
-        Ok(Self { difficulty })
+        Ok(Self {
+            ignore_nf: false,
+            difficulty,
+        })
     }
 
     /// Same as [`TaikoGradualPerformance::new`] but verifies that the map is
@@ -95,7 +99,21 @@ impl TaikoGradualPerformance {
     pub fn checked_new(difficulty: Difficulty, map: &Beatmap) -> Result<Self, CalculateError> {
         let difficulty = TaikoGradualDifficulty::checked_new(difficulty, map)?;
 
-        Ok(Self { difficulty })
+        Ok(Self {
+            ignore_nf: false,
+            difficulty,
+        })
+    }
+
+    /// Whether to ignore the `NoFail` mod's pp penalty for this calculation.
+    ///
+    /// Defaults to `false`. Stored for API symmetry; taiko has no NF penalty
+    /// so the flag has no effect.
+    #[must_use]
+    pub const fn ignore_nf(mut self, ignore_nf: bool) -> Self {
+        self.ignore_nf = ignore_nf;
+
+        self
     }
 
     /// Process the next hit object and calculate the performance attributes
@@ -121,6 +139,7 @@ impl TaikoGradualPerformance {
             .difficulty
             .nth(n)?
             .performance()
+            .ignore_nf(self.ignore_nf)
             .state(state)
             .difficulty(self.difficulty.difficulty.clone())
             .passed_objects(self.difficulty.idx as u32)

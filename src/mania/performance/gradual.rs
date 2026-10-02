@@ -68,6 +68,7 @@ use super::{ManiaPerformanceAttributes, ManiaScoreState};
 /// [`next`]: ManiaGradualPerformance::next
 /// [`nth`]: ManiaGradualPerformance::nth
 pub struct ManiaGradualPerformance {
+    ignore_nf: bool,
     difficulty: ManiaGradualDifficulty,
 }
 
@@ -76,7 +77,10 @@ impl ManiaGradualPerformance {
     pub fn new(difficulty: Difficulty, map: &Beatmap) -> Result<Self, ConvertError> {
         let difficulty = ManiaGradualDifficulty::new(difficulty, map)?;
 
-        Ok(Self { difficulty })
+        Ok(Self {
+            ignore_nf: false,
+            difficulty,
+        })
     }
 
     /// Same as [`ManiaGradualPerformance::new`] but verifies that the map is
@@ -84,7 +88,20 @@ impl ManiaGradualPerformance {
     pub fn checked_new(difficulty: Difficulty, map: &Beatmap) -> Result<Self, CalculateError> {
         let difficulty = ManiaGradualDifficulty::checked_new(difficulty, map)?;
 
-        Ok(Self { difficulty })
+        Ok(Self {
+            ignore_nf: false,
+            difficulty,
+        })
+    }
+
+    /// Whether to ignore the `NoFail` mod's pp penalty for this calculation.
+    ///
+    /// Defaults to `false`.
+    #[must_use]
+    pub const fn ignore_nf(mut self, ignore_nf: bool) -> Self {
+        self.ignore_nf = ignore_nf;
+
+        self
     }
 
     /// Process the next hit object and calculate the performance attributes
@@ -110,6 +127,7 @@ impl ManiaGradualPerformance {
             .difficulty
             .nth(n)?
             .performance()
+            .ignore_nf(self.ignore_nf)
             .state(state)
             .difficulty(self.difficulty.difficulty.clone())
             .passed_objects(self.difficulty.idx as u32)

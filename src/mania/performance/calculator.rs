@@ -7,6 +7,7 @@ pub(super) struct ManiaPerformanceCalculator<'mods> {
     attrs: ManiaDifficultyAttributes,
     mods: &'mods GameMods,
     state: ManiaScoreState,
+    ignore_nf: bool,
 }
 
 impl<'a> ManiaPerformanceCalculator<'a> {
@@ -14,8 +15,14 @@ impl<'a> ManiaPerformanceCalculator<'a> {
         attrs: ManiaDifficultyAttributes,
         mods: &'a GameMods,
         state: ManiaScoreState,
+        ignore_nf: bool,
     ) -> Self {
-        Self { attrs, mods, state }
+        Self {
+            attrs,
+            mods,
+            state,
+            ignore_nf,
+        }
     }
 }
 
@@ -23,7 +30,7 @@ impl ManiaPerformanceCalculator<'_> {
     pub fn calculate(self) -> ManiaPerformanceAttributes {
         let mut multiplier = 1.0;
 
-        if self.mods.nf() {
+        if self.mods.nf() && !self.ignore_nf {
             multiplier *= 0.75;
         }
 

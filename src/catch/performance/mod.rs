@@ -35,6 +35,7 @@ pub struct CatchPerformance<'map> {
     tiny_droplet_misses: Option<u32>,
     misses: Option<u32>,
     hitresult_generator: Option<fn(InspectCatchPerformance<'_>) -> CatchHitResults>,
+    ignore_nf: bool,
 }
 
 // Manual implementation because of the `hitresult_generator` function pointer
@@ -51,6 +52,7 @@ impl PartialEq for CatchPerformance<'_> {
             tiny_droplet_misses,
             misses,
             hitresult_generator: _,
+            ignore_nf,
         } = self;
 
         map_or_attrs == &other.map_or_attrs
@@ -62,6 +64,7 @@ impl PartialEq for CatchPerformance<'_> {
             && tiny_droplets == &other.tiny_droplets
             && tiny_droplet_misses == &other.tiny_droplet_misses
             && misses == &other.misses
+            && ignore_nf == &other.ignore_nf
     }
 }
 
@@ -277,7 +280,17 @@ impl<'map> CatchPerformance<'map> {
             tiny_droplet_misses: self.tiny_droplet_misses,
             misses: self.misses,
             hitresult_generator: Some(H::generate_hitresults),
+            ignore_nf: self.ignore_nf,
         }
+    }
+
+    /// Whether to ignore the `NoFail` mod's pp penalty for this calculation.
+    ///
+    /// Defaults to `false`.
+    pub const fn ignore_nf(mut self, ignore_nf: bool) -> Self {
+        self.ignore_nf = ignore_nf;
+
+        self
     }
 
     /// Provide parameters through an [`CatchScoreState`].
@@ -355,7 +368,13 @@ impl<'map> CatchPerformance<'map> {
         // SAFETY: Attributes are calculated in `generate_state`.
         let attrs = unsafe { self.map_or_attrs.into_attrs() };
 
-        Ok(CatchPerformanceCalculator::new(attrs, self.difficulty.get_mods(), state).calculate())
+        Ok(CatchPerformanceCalculator::new(
+            attrs,
+            self.difficulty.get_mods(),
+            state,
+            self.ignore_nf,
+        )
+        .calculate())
     }
 
     /// Same as [`CatchPerformance::calculate`] but verifies that the map was
@@ -366,7 +385,13 @@ impl<'map> CatchPerformance<'map> {
         // SAFETY: Attributes are calculated in `checked_generate_state`.
         let attrs = unsafe { self.map_or_attrs.into_attrs() };
 
-        Ok(CatchPerformanceCalculator::new(attrs, self.difficulty.get_mods(), state).calculate())
+        Ok(CatchPerformanceCalculator::new(
+            attrs,
+            self.difficulty.get_mods(),
+            state,
+            self.ignore_nf,
+        )
+        .calculate())
     }
 
     pub(crate) const fn from_map_or_attrs(map_or_attrs: MapOrAttrs<'map, Catch>) -> Self {
@@ -381,6 +406,7 @@ impl<'map> CatchPerformance<'map> {
             tiny_droplet_misses: None,
             misses: None,
             hitresult_generator: None,
+            ignore_nf: false,
         }
     }
 }
@@ -420,6 +446,7 @@ impl<'map> TryFrom<OsuPerformance<'map>> for CatchPerformance<'map> {
             hitresult_priority: _,
             hitresult_generator: _,
             legacy_total_score: _,
+            ignore_nf,
         } = osu;
 
         Ok(Self {
@@ -433,6 +460,7 @@ impl<'map> TryFrom<OsuPerformance<'map>> for CatchPerformance<'map> {
             tiny_droplet_misses: None,
             misses,
             hitresult_generator: None,
+            ignore_nf,
         })
     }
 }

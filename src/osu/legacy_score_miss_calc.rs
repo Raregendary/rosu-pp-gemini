@@ -10,6 +10,7 @@ pub struct OsuLegacyScoreMissCalculator<'a> {
     acc: f64,
     mods: &'a GameMods,
     attrs: &'a OsuDifficultyAttributes,
+    ignore_nf: bool,
 }
 
 impl<'a> OsuLegacyScoreMissCalculator<'a> {
@@ -18,12 +19,14 @@ impl<'a> OsuLegacyScoreMissCalculator<'a> {
         acc: f64,
         mods: &'a GameMods,
         attrs: &'a OsuDifficultyAttributes,
+        ignore_nf: bool,
     ) -> Self {
         Self {
             state,
             acc,
             mods,
             attrs,
+            ignore_nf,
         }
     }
 
@@ -169,7 +172,7 @@ impl<'a> OsuLegacyScoreMissCalculator<'a> {
         let score_v2 = mods.sv2();
         let mut multiplier = 1.0;
 
-        if mods.nf() {
+        if mods.nf() && !self.ignore_nf {
             multiplier *= if score_v2 { 1.0 } else { 0.5 };
         }
 
